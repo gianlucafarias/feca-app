@@ -1,112 +1,323 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { NearbyPlaceCard } from "@/components/cards/nearby-place-card";
+import { Chip } from "@/components/ui/chip";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FormField } from "@/components/ui/form-field";
+import { PageBackground } from "@/components/ui/page-background";
+import { fetchExploreContext, fetchNearbyPlaces } from "@/lib/api/places";
+import {
+  EXPLORE_CONTEXTS,
+  type ExploreContextId,
+} from "@/lib/explore-contexts";
+import { useAuth } from "@/providers/auth-provider";
+import { fecaTheme } from "@/theme/feca";
+import type { NearbyPlace } from "@/types/places";
 
-export default function TabTwoScreen() {
+type TypeFilter = "all" | "cafe" | "restaurant";
+
+const DEBOUNCE_MS = 400;
+
+export default function ExploreScreen() {
+  const { session } = useAuth();
+
+  const [places, setPlaces] = useState<NearbyPlace[]>([]);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<TypeFilter>("all");
+  const [contextFilter, setContextFilter] = useState<ExploreContextId | null>(
+    null,
+  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const lat = session?.user.lat;
+  const lng = session?.user.lng;
+  const accessToken = session?.accessToken;
+
+  const search = useCallback(
+    async (searchQuery: string, typeFilter: TypeFilter) => {
+      if (!accessToken) {
+        setPlaces([]);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const results = await fetchNearbyPlaces({
+          accessToken,
+          lat: lat ?? undefined,
+          lng: lng ?? undefined,
+          query: searchQuery.trim() || undefined,
+          type: typeFilter === "all" ? undefined : typeFilter,
+        });
+        setPlaces(results);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "No se pudieron cargar los lugares";
+        setError(message);
+        setPlaces([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [accessToken, lat, lng],
+  );
+
+  useEffect(() => {
+    if (contextFilter != null) {
+      if (!accessToken) {
+        setPlaces([]);
+        setIsLoading(false);
+        setError(null);
+      } else {
+        setIsLoading(true);
+        setError(null);
+        void fetchExploreContext({
+          accessToken,
+          intent: contextFilter,
+          lat: lat ?? undefined,
+          lng: lng ?? undefined,
+        })
+          .then((results) => {
+            setPlaces(results);
+          })
+          .catch((err) => {
+            const message =
+              err instanceof Error
+                ? err.message
+                : "No se pudieron cargar los contextos";
+            setError(message);
+            setPlaces([]);
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+      }
+      return;
+    }
+    void search("", filter);
+  }, [accessToken, contextFilter, filter, lat, lng, search]);
+
+  const handleQueryChange = useCallback(
+    (text: string) => {
+      setQuery(text);
+      if (contextFilter != null) {
+        setContextFilter(null);
+      }
+
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        void search(text, filter);
+      }, DEBOUNCE_MS);
+    },
+    [filter, search, contextFilter],
+  );
+
+  const handleFilterChange = useCallback(
+    (next: TypeFilter) => {
+      setFilter(next);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      if (contextFilter != null) {
+        setContextFilter(null);
+      }
+      void search(query, next);
+    },
+    [query, search, contextFilter],
+  );
+
+  const selectContext = useCallback((id: ExploreContextId) => {
+    setQuery("");
+    setContextFilter((current) => (current === id ? null : id));
+  }, []);
+
+  const hasLocation = lat != null && lng != null;
+
+  const contextLabel = contextFilter
+    ? EXPLORE_CONTEXTS.find((c) => c.id === contextFilter)?.label
+    : null;
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <PageBackground>
+      <FlatList
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="automatic"
+        data={places}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        keyExtractor={(item) => item.googlePlaceId}
+        ListEmptyComponent={
+          isLoading ? (
+            <View style={styles.centered}>
+              <ActivityIndicator color={fecaTheme.colors.primary} size="large" />
+            </View>
+          ) : !hasLocation ? (
+            <EmptyState
+              description="Activa tu ubicación o vuelve a onboarding para completar tu ciudad."
+              icon="location-outline"
+              title="Sin ubicación"
+            />
+          ) : error ? (
+            <EmptyState
+              description={error}
+              icon="cloud-offline-outline"
+              title="Error al buscar"
+            />
+          ) : (
+            <EmptyState
+              description="Probá otro momento o limpiá la búsqueda."
+              icon="map-outline"
+              title="Sin resultados"
+            />
+          )
+        }
+        ListHeaderComponent={
+          <View style={styles.headerWrap}>
+            <Text style={styles.screenTitle}>Explorar</Text>
+            <Text style={styles.screenSubtitle}>
+              Elegí un momento: te sugerimos lugares con intención. El
+              buscador sigue acá para cuando ya sabés qué buscar.
+            </Text>
+
+            <ScrollView
+              horizontal
+              contentContainerStyle={styles.contextRow}
+              showsHorizontalScrollIndicator={false}
+            >
+              {EXPLORE_CONTEXTS.map((ctx) => (
+                <Chip
+                  key={ctx.id}
+                  label={ctx.label}
+                  onPress={() => selectContext(ctx.id)}
+                  selected={contextFilter === ctx.id}
+                />
+              ))}
+            </ScrollView>
+
+            {contextFilter ? (
+              <Text style={styles.contextHint}>
+                {EXPLORE_CONTEXTS.find((c) => c.id === contextFilter)?.subtitle}
+              </Text>
+            ) : null}
+
+            <FormField
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={handleQueryChange}
+              placeholder="Buscar café, restaurante..."
+              value={query}
+            />
+
+            <View style={styles.filters}>
+              <Chip
+                label="Todo"
+                onPress={() => handleFilterChange("all")}
+                selected={filter === "all"}
+              />
+              <Chip
+                label="Café"
+                onPress={() => handleFilterChange("cafe")}
+                selected={filter === "cafe"}
+              />
+              <Chip
+                label="Restaurante"
+                onPress={() => handleFilterChange("restaurant")}
+                selected={filter === "restaurant"}
+              />
+            </View>
+
+            <View style={styles.listHeading}>
+              <Text style={styles.listTitle}>
+                {contextLabel ? contextLabel : "Lugares"}
+              </Text>
+              {!isLoading ? (
+                <Text style={styles.listMeta}>
+                  {places.length}{" "}
+                  {places.length === 1 ? "resultado" : "resultados"}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        }
+        renderItem={({ item }) => <NearbyPlaceCard place={item} />}
+        showsVerticalScrollIndicator={false}
+      />
+    </PageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  content: {
+    paddingBottom: 140,
+    paddingHorizontal: fecaTheme.spacing.lg,
+    paddingTop: fecaTheme.spacing.xxl,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  headerWrap: {
+    gap: fecaTheme.spacing.lg,
+    marginBottom: fecaTheme.spacing.lg,
+  },
+  screenTitle: {
+    ...fecaTheme.typography.headline,
+    color: fecaTheme.colors.onSurface,
+    paddingHorizontal: fecaTheme.spacing.xs,
+  },
+  screenSubtitle: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.muted,
+    lineHeight: 18,
+    paddingHorizontal: fecaTheme.spacing.xs,
+  },
+  contextRow: {
+    flexDirection: "row",
+    gap: fecaTheme.spacing.sm,
+    paddingVertical: fecaTheme.spacing.xxs,
+  },
+  contextHint: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.primary,
+    paddingHorizontal: fecaTheme.spacing.xs,
+  },
+  filters: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: fecaTheme.spacing.sm,
+  },
+  listHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: fecaTheme.spacing.xs,
+  },
+  listTitle: {
+    ...fecaTheme.typography.bodyStrong,
+    color: fecaTheme.colors.onSurface,
+  },
+  listMeta: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.muted,
+  },
+  separator: {
+    height: fecaTheme.spacing.lg,
+  },
+  centered: {
+    alignItems: "center",
+    paddingVertical: fecaTheme.spacing.xxl,
   },
 });

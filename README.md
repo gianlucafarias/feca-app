@@ -1,8 +1,14 @@
-# Welcome to your Expo app 👋
+# FECA
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Mobile app prototype for discovering, saving, and reviewing coffee shops and brunch spots.
 
-## Get started
+## Project docs
+
+- Design system: [DESIGN.md](./DESIGN.md)
+- Places/backend architecture: [docs/places-backend.md](./docs/places-backend.md)
+- Social auth architecture: [docs/social-auth-architecture.md](./docs/social-auth-architecture.md)
+
+## App setup
 
 1. Install dependencies
 
@@ -16,35 +22,33 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+## Google sign-in test
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+1. Copy `.env.example` to `.env`
+2. Set:
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+   - `EXPO_PUBLIC_API_BASE_URL`
+   - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+   - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
+   - `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME`
 
-## Get a fresh project
+3. Create a development build
 
-When you're ready, run:
+   ```bash
+   npx expo run:ios
+   ```
 
-```bash
-npm run reset-project
-```
+   or
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+   ```bash
+   npx expo run:android
+   ```
 
-## Learn more
+`@react-native-google-signin/google-signin` does not work in Expo Go.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Stack
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Expo
+- React Native
+- Expo Router
+- TypeScript
