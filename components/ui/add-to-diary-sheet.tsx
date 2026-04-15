@@ -133,7 +133,7 @@ export function AddToDiarySheet({
 
 const styles = StyleSheet.create({
   overlay: {
-    backgroundColor: "rgba(27, 28, 26, 0.45)",
+    backgroundColor: fecaTheme.colors.scrim,
     flex: 1,
     justifyContent: "flex-end",
   },

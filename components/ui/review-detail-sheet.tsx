@@ -124,7 +124,7 @@ export function ReviewDetailSheet({
                   style={styles.likeBtn}
                 >
                   <Ionicons
-                    color={liked ? fecaTheme.colors.secondary : fecaTheme.colors.outlineVariant}
+                    color={liked ? fecaTheme.colors.secondary : fecaTheme.colors.iconSubtle}
                     name={liked ? "heart" : "heart-outline"}
                     size={22}
                   />
@@ -135,7 +135,7 @@ export function ReviewDetailSheet({
                 {Array.from({ length: 5 }, (_, i) => (
                   <Ionicons
                     key={i}
-                    color={i < visit.rating ? fecaTheme.colors.secondary : fecaTheme.colors.outlineVariant}
+                    color={i < visit.rating ? fecaTheme.colors.secondary : fecaTheme.colors.iconSubtle}
                     name={i < visit.rating ? "star" : "star-outline"}
                     size={18}
                   />
@@ -216,7 +216,7 @@ export function ReviewDetailSheet({
 
 const styles = StyleSheet.create({
   overlay: {
-    backgroundColor: "rgba(27, 28, 26, 0.45)",
+    backgroundColor: fecaTheme.colors.scrim,
     flex: 1,
     justifyContent: "flex-end",
   },
@@ -229,8 +229,8 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignSelf: "center",
-    backgroundColor: fecaTheme.colors.outlineVariant,
-    borderRadius: 3,
+    backgroundColor: fecaTheme.colors.iconSubtle,
+    borderRadius: fecaTheme.radii.pill,
     height: 4,
     marginBottom: fecaTheme.spacing.md,
     marginTop: fecaTheme.spacing.sm,
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     padding: fecaTheme.spacing.md,
   },
   placeDot: {
-    borderRadius: 10,
+    borderRadius: fecaTheme.radii.pill,
     height: 20,
     width: 20,
   },
@@ -330,19 +330,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   footer: {
-    borderTopColor: fecaTheme.colors.outlineVariant,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: fecaTheme.surfaces.low,
     flexDirection: "row",
     gap: fecaTheme.spacing.sm,
     paddingBottom: 32,
     paddingHorizontal: fecaTheme.spacing.xl,
-    paddingTop: fecaTheme.spacing.md,
+    paddingTop: fecaTheme.spacing.lg,
   },
   footerBtn: {
     alignItems: "center",
-    borderColor: fecaTheme.colors.outlineVariant,
+    backgroundColor: fecaTheme.surfaces.container,
     borderRadius: fecaTheme.radii.md,
-    borderWidth: 1,
     flex: 1,
     flexDirection: "row",
     gap: 6,
@@ -350,8 +348,7 @@ const styles = StyleSheet.create({
     paddingVertical: fecaTheme.spacing.sm,
   },
   footerBtnActive: {
-    backgroundColor: "rgba(81, 100, 67, 0.08)",
-    borderColor: fecaTheme.colors.primary,
+    backgroundColor: fecaTheme.colors.secondaryFixed,
   },
   footerPrimary: {
     alignItems: "center",

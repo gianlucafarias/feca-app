@@ -45,7 +45,7 @@ export const ShareableReviewCard = forwardRef<View, ShareableReviewCardProps>(
                 color={
                   i < visit.rating
                     ? fecaTheme.colors.secondary
-                    : "rgba(150, 71, 51, 0.2)"
+                    : fecaTheme.colors.iconSubtle
                 }
                 name={i < visit.rating ? "star" : "star-outline"}
                 size={24}
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     color: fecaTheme.colors.primary,
   },
   accentDot: {
-    borderRadius: 6,
+    borderRadius: fecaTheme.radii.pill,
     height: 12,
     width: 12,
     marginTop: 4,
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   placeAccent: {
-    borderRadius: 8,
+    borderRadius: fecaTheme.radii.pill,
     height: 48,
     width: 6,
   },
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
     color: fecaTheme.colors.onSurface,
   },
   placeNeighborhood: {
-    fontFamily: "Manrope_500Medium",
+    fontFamily: "PlusJakartaSans_500Medium",
     fontSize: 14,
     lineHeight: 18,
     color: fecaTheme.colors.muted,
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   note: {
-    fontFamily: "Manrope_400Regular",
+    fontFamily: "PlusJakartaSans_400Regular",
     fontSize: 16,
     lineHeight: 24,
     color: fecaTheme.colors.onSurface,
@@ -169,13 +169,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   userName: {
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 15,
     lineHeight: 20,
     color: fecaTheme.colors.onSurface,
   },
   userDate: {
-    fontFamily: "Manrope_500Medium",
+    fontFamily: "PlusJakartaSans_500Medium",
     fontSize: 12,
     lineHeight: 16,
     color: fecaTheme.colors.muted,
@@ -186,19 +186,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   companionText: {
-    fontFamily: "Manrope_500Medium",
+    fontFamily: "PlusJakartaSans_500Medium",
     fontSize: 13,
     lineHeight: 18,
     color: fecaTheme.colors.muted,
   },
   footer: {
     alignItems: "center",
-    borderTopColor: fecaTheme.colors.outlineVariant,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 16,
+    paddingBottom: fecaTheme.spacing.lg,
+    paddingHorizontal: fecaTheme.spacing.sm,
+    paddingTop: fecaTheme.spacing.xl,
   },
   footerText: {
-    fontFamily: "Manrope_500Medium",
+    fontFamily: "PlusJakartaSans_500Medium",
     fontSize: 12,
     lineHeight: 16,
     color: fecaTheme.colors.muted,

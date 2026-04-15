@@ -390,7 +390,7 @@ export default function GroupDetailScreen() {
             </Text>
           </View>
           <Ionicons
-            color={fecaTheme.colors.outlineVariant}
+            color={fecaTheme.colors.iconSubtle}
             name={isExpanded ? "chevron-up" : "chevron-down"}
             size={16}
           />
@@ -1029,7 +1029,7 @@ const styles = StyleSheet.create({
     padding: fecaTheme.spacing.md,
   },
   eventDot: {
-    borderRadius: 8,
+    borderRadius: fecaTheme.radii.pill,
     height: 16,
     width: 16,
   },
@@ -1064,10 +1064,9 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   expandedActions: {
-    borderTopColor: fecaTheme.colors.outlineVariant,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: fecaTheme.surfaces.low,
     paddingHorizontal: fecaTheme.spacing.sm,
-    paddingVertical: fecaTheme.spacing.xs,
+    paddingVertical: fecaTheme.spacing.sm,
   },
   actionRow: {
     alignItems: "center",
@@ -1083,7 +1082,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   proposeOverlay: {
-    backgroundColor: "rgba(27, 28, 26, 0.45)",
+    backgroundColor: fecaTheme.colors.scrim,
     flex: 1,
     justifyContent: "flex-end",
   },
@@ -1189,7 +1188,7 @@ const styles = StyleSheet.create({
     paddingVertical: fecaTheme.spacing.sm,
   },
   placeDot: {
-    borderRadius: 10,
+    borderRadius: fecaTheme.radii.pill,
     height: 20,
     width: 20,
   },
@@ -1269,7 +1268,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     alignItems: "center",
-    backgroundColor: "rgba(27, 28, 26, 0.45)",
+    backgroundColor: fecaTheme.colors.scrim,
     flex: 1,
     justifyContent: "center",
     padding: fecaTheme.spacing.xl,

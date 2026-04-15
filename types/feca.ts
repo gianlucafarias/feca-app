@@ -85,6 +85,10 @@ export type RichVisitDraft = {
   priceTier: number | null;
   /** URLs/URIs de fotos agregadas a la visita. */
   photoUris: string[];
+  /** Opcional: hay buen estacionamiento (solo UI → API si el backend lo acepta). */
+  hasParking: boolean | null;
+  /** Opcional: apto mascotas. */
+  petFriendly: boolean | null;
 };
 
 export type TastePreference = {

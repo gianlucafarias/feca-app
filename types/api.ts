@@ -69,6 +69,9 @@ export type CreateVisitPayload = {
   waitLevel?: number;
   priceTier?: number;
   photoUrls?: string[];
+  /** Campos extra opcionales (el servidor puede ignorarlos si aún no existen). */
+  hasParking?: boolean;
+  petFriendly?: boolean;
 };
 
 export type ApiMeUser = ApiUserPublic & {

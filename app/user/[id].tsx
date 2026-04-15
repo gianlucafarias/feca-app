@@ -487,9 +487,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "center",
     backgroundColor: fecaTheme.colors.primary,
-    borderColor: "transparent",
     borderRadius: fecaTheme.radii.pill,
-    borderWidth: 1.5,
     flexDirection: "row",
     gap: fecaTheme.spacing.xs,
     marginBottom: fecaTheme.spacing.xl,
@@ -502,9 +500,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   followBtnOutline: {
-    backgroundColor: "transparent",
-    borderColor: fecaTheme.colors.primary,
-    borderWidth: 1.5,
+    backgroundColor: fecaTheme.surfaces.container,
   },
   followBtnTextOutline: {
     color: fecaTheme.colors.primary,

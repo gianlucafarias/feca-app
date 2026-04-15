@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
 import { SurfaceCard } from "@/components/ui/surface-card";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 
 type EmptyStateProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
   },
   iconWrap: {
     alignItems: "center",
-    backgroundColor: "rgba(81, 100, 67, 0.10)",
+    backgroundColor: hexToRgba(fecaTheme.colors.primary, 0.1),
     borderRadius: fecaTheme.radii.pill,
     height: 52,
     justifyContent: "center",

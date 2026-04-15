@@ -96,7 +96,8 @@ const styles = StyleSheet.create({
   },
   barFill: {
     backgroundColor: fecaTheme.colors.primary,
-    borderRadius: 4,
+    borderTopLeftRadius: fecaTheme.radii.xs,
+    borderTopRightRadius: fecaTheme.radii.xs,
     width: "78%",
   },
   scaleRow: {

@@ -40,7 +40,13 @@
         }
       ],
       "@react-native-google-signin/google-signin",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "feca necesita acceso a tu galería para adjuntar fotos a la reseña."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

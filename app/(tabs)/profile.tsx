@@ -18,6 +18,7 @@ import { AvatarBadge } from "@/components/ui/avatar-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RatingDistributionBars } from "@/components/profile/rating-distribution-bars";
 import { PageBackground } from "@/components/ui/page-background";
+import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { fetchMyDiaries } from "@/lib/api/diaries";
 import { fetchMyFriends } from "@/lib/api/friends";
 import { fetchMe } from "@/lib/api/me";
@@ -212,7 +213,7 @@ export default function ProfileScreen() {
     <PageBackground>
       <ScrollView
         contentContainerStyle={styles.content}
-        contentInsetAdjustmentBehavior="automatic"
+        contentInsetAdjustmentBehavior="never"
         refreshControl={
           <RefreshControl
             onRefresh={() => void loadProfile()}
@@ -222,20 +223,11 @@ export default function ProfileScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+        <TabScreenHeader
+          showNotifications={Boolean(session?.accessToken)}
+          onPressNotifications={() => router.push("/notifications")}
+        />
         <View style={styles.hero}>
-          {session?.accessToken ? (
-            <Pressable
-              accessibilityLabel="Notificaciones"
-              onPress={() => router.push("/notifications")}
-              style={styles.heroBell}
-            >
-              <Ionicons
-                color={fecaTheme.colors.onSurface}
-                name="notifications-outline"
-                size={22}
-              />
-            </Pressable>
-          ) : null}
           <AvatarBadge
             accent={fecaTheme.colors.secondary}
             name={displayName}
@@ -454,26 +446,14 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 160,
     paddingHorizontal: fecaTheme.spacing.lg,
-    paddingTop: fecaTheme.spacing.xxl,
+    paddingTop: 0,
   },
   hero: {
     alignItems: "center",
     gap: fecaTheme.spacing.xs,
     paddingBottom: fecaTheme.spacing.xl,
-    paddingTop: fecaTheme.spacing.lg,
+    paddingTop: fecaTheme.spacing.md,
     position: "relative",
-  },
-  heroBell: {
-    alignItems: "center",
-    backgroundColor: fecaTheme.surfaces.high,
-    borderRadius: fecaTheme.radii.pill,
-    height: 40,
-    justifyContent: "center",
-    position: "absolute",
-    right: 0,
-    top: fecaTheme.spacing.sm,
-    width: 40,
-    zIndex: 1,
   },
   displayName: {
     ...fecaTheme.typography.headline,

@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.primary,
     flex: 1,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
   },
   metaMuted: {
     ...fecaTheme.typography.meta,
@@ -135,14 +135,14 @@ const styles = StyleSheet.create({
   },
   avatarWrap: {
     borderColor: fecaTheme.surfaces.lowest,
-    borderRadius: 14,
+    borderRadius: fecaTheme.radii.md,
     borderWidth: 2,
   },
   overflowBadge: {
     alignItems: "center",
     backgroundColor: fecaTheme.surfaces.high,
     borderColor: fecaTheme.surfaces.lowest,
-    borderRadius: 14,
+    borderRadius: fecaTheme.radii.md,
     borderWidth: 2,
     height: 28,
     justifyContent: "center",

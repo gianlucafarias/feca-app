@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   },
   backdropFill: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(27, 28, 26, 0.45)",
+    backgroundColor: fecaTheme.colors.scrim,
     zIndex: 0,
   },
   sheetLift: {
@@ -381,11 +381,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: fecaTheme.spacing.xl,
   },
   footer: {
-    borderTopColor: fecaTheme.colors.outlineVariant,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: fecaTheme.surfaces.low,
     gap: fecaTheme.spacing.sm,
+    paddingBottom: fecaTheme.spacing.sm,
     paddingHorizontal: fecaTheme.spacing.xl,
-    paddingTop: fecaTheme.spacing.md,
+    paddingTop: fecaTheme.spacing.lg,
   },
   hint: {
     ...fecaTheme.typography.meta,
@@ -401,21 +401,18 @@ const styles = StyleSheet.create({
     marginTop: fecaTheme.spacing.sm,
   },
   suggestionsBox: {
-    backgroundColor: fecaTheme.surfaces.lowest,
-    borderColor: fecaTheme.colors.outlineVariant,
-    borderRadius: fecaTheme.radii.sm,
-    borderWidth: 1,
+    backgroundColor: fecaTheme.surfaces.container,
+    borderRadius: fecaTheme.radii.md,
     marginTop: fecaTheme.spacing.sm,
     overflow: "hidden",
+    ...fecaTheme.elevation.ambient,
   },
   suggestionsScroll: {
     overflow: "hidden",
   },
   suggestionRow: {
-    borderBottomColor: fecaTheme.colors.outlineVariant,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: fecaTheme.spacing.md,
-    paddingVertical: fecaTheme.spacing.sm,
+    paddingVertical: fecaTheme.spacing.md,
   },
   suggestionRowPressed: {
     backgroundColor: fecaTheme.surfaces.high,

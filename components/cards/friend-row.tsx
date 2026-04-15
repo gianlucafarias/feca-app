@@ -67,15 +67,13 @@ const styles = StyleSheet.create({
   },
   checkbox: {
     alignItems: "center",
-    borderColor: fecaTheme.colors.outlineVariant,
-    borderRadius: 6,
-    borderWidth: 1.5,
+    backgroundColor: fecaTheme.surfaces.container,
+    borderRadius: fecaTheme.radii.xs,
     height: 24,
     justifyContent: "center",
     width: 24,
   },
   checkboxSelected: {
     backgroundColor: fecaTheme.colors.primary,
-    borderColor: fecaTheme.colors.primary,
   },
 });

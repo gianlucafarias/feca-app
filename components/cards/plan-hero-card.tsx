@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   },
   overflowText: {
     color: "#ffffff",
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 12,
   },
   watermark: {

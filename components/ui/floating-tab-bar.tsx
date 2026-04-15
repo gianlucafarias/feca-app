@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { fecaTheme } from "@/theme/feca";
@@ -77,13 +78,17 @@ export function FloatingTabBar({
         onLongPress={() => navigation.emit({ type: "tabLongPress", target: route.key })}
         style={styles.tab}
       >
-        <Ionicons
-          color={
-            focused ? fecaTheme.colors.primary : fecaTheme.colors.muted
-          }
-          name={focused ? config.activeIcon : config.idleIcon}
-          size={20}
-        />
+        <View style={styles.tabIconWrap}>
+          {focused ? <View style={styles.activeOrb} /> : null}
+          <Ionicons
+            color={
+              focused ? fecaTheme.colors.onSecondaryFixed : fecaTheme.colors.muted
+            }
+            name={focused ? config.activeIcon : config.idleIcon}
+            size={20}
+            style={styles.tabIcon}
+          />
+        </View>
         <Text style={[styles.tabLabel, focused ? styles.tabLabelActive : null]}>
           {(descriptor.options.title as string) || config.label}
         </Text>
@@ -96,34 +101,44 @@ export function FloatingTabBar({
       pointerEvents="box-none"
       style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
-      <View style={styles.bar}>
-        <View style={styles.row}>
-          {renderTab(routeOrder[0])}
-          {renderTab(routeOrder[1])}
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {
-                // noop
-              });
-              router.push("/visit/new");
-            }}
-            style={styles.actionWrap}
-          >
-            <LinearGradient
-              colors={[
-                fecaTheme.colors.secondary,
-                fecaTheme.colors.primaryContainer,
-              ]}
-              style={styles.action}
+      <BlurView
+        experimentalBlurMethod={
+          Platform.OS === "android" ? "dimezisBlurView" : undefined
+        }
+        intensity={Platform.OS === "ios" ? 28 : 48}
+        style={styles.barBlur}
+        tint="light"
+      >
+        <View style={styles.barTint}>
+          <View style={styles.row}>
+            {renderTab(routeOrder[0])}
+            {renderTab(routeOrder[1])}
+            <Pressable
+              accessibilityLabel="Nueva visita"
+              accessibilityRole="button"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {
+                  // noop
+                });
+                router.push("/visit/new");
+              }}
+              style={styles.actionWrap}
             >
-              <Ionicons color={fecaTheme.colors.onPrimary} name="add" size={24} />
-            </LinearGradient>
-          </Pressable>
-          {renderTab(routeOrder[2])}
-          {renderTab(routeOrder[3])}
+              <LinearGradient
+                colors={[
+                  fecaTheme.colors.secondary,
+                  fecaTheme.colors.secondaryDim,
+                ]}
+                style={styles.action}
+              >
+                <Ionicons color={fecaTheme.colors.onPrimary} name="cafe" size={24} />
+              </LinearGradient>
+            </Pressable>
+            {renderTab(routeOrder[2])}
+            {renderTab(routeOrder[3])}
+          </View>
         </View>
-      </View>
+      </BlurView>
     </View>
   );
 }
@@ -135,12 +150,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  bar: {
-    ...fecaTheme.elevation.floating,
+  barBlur: {
     alignSelf: "center",
-    backgroundColor: "rgba(242, 239, 233, 0.96)",
     borderRadius: fecaTheme.radii.xl,
+    overflow: "hidden",
     width: "92%",
+  },
+  barTint: {
+    backgroundColor: fecaTheme.surfaces.glass,
   },
   row: {
     alignItems: "center",
@@ -156,6 +173,22 @@ const styles = StyleSheet.create({
     minHeight: 52,
     justifyContent: "center",
   },
+  tabIconWrap: {
+    alignItems: "center",
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  activeOrb: {
+    backgroundColor: fecaTheme.colors.primaryFixed,
+    borderRadius: 20,
+    height: 40,
+    position: "absolute",
+    width: 40,
+  },
+  tabIcon: {
+    zIndex: 1,
+  },
   tabLabel: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.muted,
@@ -163,17 +196,17 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     color: fecaTheme.colors.primary,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
   },
   actionWrap: {
     marginHorizontal: fecaTheme.spacing.xs,
   },
   action: {
-    ...fecaTheme.elevation.ambient,
     alignItems: "center",
     borderRadius: 28,
     height: 56,
     justifyContent: "center",
     width: 56,
+    ...fecaTheme.elevation.ambient,
   },
 });

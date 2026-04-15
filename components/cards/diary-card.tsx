@@ -35,7 +35,7 @@ export function DiaryCard({ diary }: DiaryCardProps) {
             <View key={`${diary.id}-dot-${i}`} style={[styles.dot, { backgroundColor: color }]} />
           ))}
           {diary.places.length === 0 ? (
-            <View style={[styles.dot, { backgroundColor: fecaTheme.colors.outlineVariant }]} />
+            <View style={[styles.dot, { backgroundColor: fecaTheme.colors.iconSubtle }]} />
           ) : null}
         </View>
       )}
@@ -45,7 +45,7 @@ export function DiaryCard({ diary }: DiaryCardProps) {
           {subtitle}
         </Text>
       </View>
-      <Ionicons color={fecaTheme.colors.outlineVariant} name="chevron-forward" size={16} />
+      <Ionicons color={fecaTheme.colors.iconSubtle} name="chevron-forward" size={16} />
     </Pressable>
   );
 }

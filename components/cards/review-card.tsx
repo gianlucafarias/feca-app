@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AvatarBadge } from "@/components/ui/avatar-badge";
 import { formatVisitDate } from "@/lib/format";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { Visit } from "@/types/feca";
 
 type ReviewCardProps = {
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   ratingBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(150, 71, 51, 0.10)",
+    backgroundColor: hexToRgba(fecaTheme.colors.secondary, 0.1),
     borderRadius: fecaTheme.radii.pill,
     flexDirection: "row",
     gap: 3,

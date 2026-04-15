@@ -265,7 +265,7 @@ export default function DiaryDetailScreen() {
                         {Array.from({ length: 5 }, (_, i) => (
                           <Ionicons
                             key={i}
-                            color={i < rating ? fecaTheme.colors.secondary : fecaTheme.colors.outlineVariant}
+                            color={i < rating ? fecaTheme.colors.secondary : fecaTheme.colors.iconSubtle}
                             name={i < rating ? "star" : "star-outline"}
                             size={13}
                           />
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
   },
   gridAccent: {
-    borderRadius: 2,
+    borderRadius: fecaTheme.radii.pill,
     flex: 1,
     height: 6,
   },
@@ -490,12 +490,12 @@ const styles = StyleSheet.create({
   },
   noRating: {
     ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.outlineVariant,
+    color: fecaTheme.colors.onSurfaceVariant,
     fontSize: 11,
     marginTop: 4,
   },
   placeDot: {
-    borderRadius: 8,
+    borderRadius: fecaTheme.radii.pill,
     height: 16,
     width: 16,
   },
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
     color: fecaTheme.colors.muted,
   },
   modalOverlay: {
-    backgroundColor: "rgba(27, 28, 26, 0.45)",
+    backgroundColor: fecaTheme.colors.scrim,
     flex: 1,
     justifyContent: "flex-end",
   },

@@ -3,6 +3,7 @@ import { Image } from "expo-image";
 import { router } from "expo-router";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,8 @@ import type { NearbyPlace } from "@/types/places";
 
 const CARD_WIDTH = 208;
 const IMAGE_HEIGHT = 232;
+/** Ancho reservado a la derecha para “Ver mapa” (evita recorte por flex / clip del list) */
+const MAP_LINK_RESERVE = 118;
 
 type NearbyPlacesSliderProps = {
   places: NearbyPlace[];
@@ -74,14 +77,26 @@ export function NearbyPlacesSlider({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Lugares cerca</Text>
+        <Text
+          ellipsizeMode="tail"
+          numberOfLines={1}
+          style={styles.sectionTitle}
+        >
+          Lugares cerca
+        </Text>
         <Pressable
           accessibilityLabel="Ver mapa"
           accessibilityRole="button"
           hitSlop={8}
           onPress={() => router.push("/explore")}
+          style={styles.mapLinkPressable}
         >
-          <Text style={styles.mapLink}>Ver mapa</Text>
+          <Text
+            style={styles.mapLink}
+            {...(Platform.OS === "android" ? { includeFontPadding: false } : {})}
+          >
+            Ver mapa
+          </Text>
         </Pressable>
       </View>
 
@@ -124,20 +139,36 @@ const styles = StyleSheet.create({
     marginBottom: fecaTheme.spacing.xl,
   },
   sectionHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
+    minHeight: 28,
+    overflow: "visible",
+    position: "relative",
+    width: "100%",
   },
   sectionTitle: {
     ...fecaTheme.typography.title,
     color: fecaTheme.colors.onSurface,
     fontSize: 22,
     lineHeight: 26,
+    maxWidth: "100%",
+    paddingRight: MAP_LINK_RESERVE,
+  },
+  mapLinkPressable: {
+    alignItems: "center",
+    bottom: 0,
+    flexShrink: 0,
+    justifyContent: "center",
+    paddingLeft: fecaTheme.spacing.xs,
+    paddingRight: 2,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 2,
   },
   mapLink: {
     ...fecaTheme.typography.bodyStrong,
     color: fecaTheme.colors.primary,
     fontSize: 15,
+    paddingRight: Platform.OS === "android" ? 2 : 1,
   },
   scrollContent: {
     gap: fecaTheme.spacing.md,

@@ -62,6 +62,6 @@ const styles = StyleSheet.create({
   },
   labelActive: {
     color: fecaTheme.colors.onSurface,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
   },
 });

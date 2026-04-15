@@ -1,12 +1,14 @@
 import { ThemeProvider } from "@react-navigation/native";
 import {
-  Manrope_400Regular,
-  Manrope_500Medium,
-  Manrope_600SemiBold,
-} from "@expo-google-fonts/manrope";
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+} from "@expo-google-fonts/plus-jakarta-sans";
 import {
+  Newsreader_400Regular_Italic,
   Newsreader_500Medium_Italic,
   Newsreader_700Bold,
+  Newsreader_700Bold_Italic,
 } from "@expo-google-fonts/newsreader";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
@@ -27,11 +29,13 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    Manrope_400Regular,
-    Manrope_500Medium,
-    Manrope_600SemiBold,
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    Newsreader_400Regular_Italic,
     Newsreader_500Medium_Italic,
     Newsreader_700Bold,
+    Newsreader_700Bold_Italic,
   });
 
   useEffect(() => {
@@ -73,7 +77,8 @@ export default function RootLayout() {
                   name="visit/new"
                   options={{
                     animation: "slide_from_bottom",
-                    presentation: "modal",
+                    /** Sin “hoja” flotante: evita el hueco superior del sheet en iOS */
+                    presentation: "fullScreenModal",
                   }}
                 />
                 <Stack.Screen

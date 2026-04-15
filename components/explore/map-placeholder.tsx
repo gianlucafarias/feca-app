@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Text, View } from "react-native";
 
 import { SurfaceCard } from "@/components/ui/surface-card";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { ExplorePin } from "@/types/feca";
 
 type MapPlaceholderProps = {
@@ -14,7 +14,10 @@ export function MapPlaceholder({ pins }: MapPlaceholderProps) {
   return (
     <SurfaceCard elevated style={styles.card}>
       <LinearGradient
-        colors={["rgba(81, 100, 67, 0.18)", "rgba(150, 71, 51, 0.08)"]}
+        colors={[
+          hexToRgba(fecaTheme.colors.primary, 0.18),
+          hexToRgba(fecaTheme.colors.secondary, 0.08),
+        ]}
         style={styles.canvas}
       >
         <View style={styles.neighborhoodOne}>
@@ -91,7 +94,7 @@ const styles = StyleSheet.create({
   },
   neighborhoodLabel: {
     ...fecaTheme.typography.label,
-    color: "rgba(27, 28, 26, 0.36)",
+    color: fecaTheme.colors.scrimMuted,
     textTransform: "uppercase",
   },
   pinWrap: {
@@ -102,7 +105,7 @@ const styles = StyleSheet.create({
   pin: {
     alignItems: "center",
     backgroundColor: fecaTheme.colors.secondary,
-    borderRadius: 14,
+    borderRadius: fecaTheme.radii.pill,
     height: 28,
     justifyContent: "center",
     width: 28,
@@ -114,7 +117,7 @@ const styles = StyleSheet.create({
   },
   emptyOverlay: {
     alignItems: "center",
-    backgroundColor: "rgba(242, 239, 233, 0.78)",
+    backgroundColor: fecaTheme.colors.glassSoft,
     bottom: 24,
     borderRadius: fecaTheme.radii.md,
     gap: fecaTheme.spacing.xs,

@@ -10,16 +10,14 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ActivityFeedRow } from "@/components/home/activity-feed-row";
 import { NearbyPlacesSlider } from "@/components/home/nearby-places-slider";
-import { VisitCard } from "@/components/cards/visit-card";
-import { AvatarBadge } from "@/components/ui/avatar-badge";
-import { AddToDiarySheet } from "@/components/ui/add-to-diary-sheet";
 import { ChangeCitySheet } from "@/components/ui/change-city-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBackground } from "@/components/ui/page-background";
 import { ReviewDetailSheet } from "@/components/ui/review-detail-sheet";
+import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { useHomeFeed } from "@/hooks/use-home-feed";
 import { useNearbyPlaces } from "@/hooks/use-nearby-places";
 import { useAuth } from "@/providers/auth-provider";
@@ -27,7 +25,6 @@ import { fecaTheme } from "@/theme/feca";
 import type { FeedItem, Visit } from "@/types/feca";
 
 export default function HomeScreen() {
-  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const {
     listData,
@@ -53,22 +50,10 @@ export default function HomeScreen() {
     lng: session?.user.lng,
   });
 
-  const [diaryPlace, setDiaryPlace] = useState<{
-    placeId: string;
-    googlePlaceId?: string;
-  } | null>(null);
   const [reviewVisit, setReviewVisit] = useState<Visit | null>(null);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [cityPickerNonce, setCityPickerNonce] = useState(0);
 
-  const handleAddToDiary = useCallback(
-    (placeId: string, googlePlaceId?: string) => {
-      setDiaryPlace({ placeId, googlePlaceId });
-    },
-    [],
-  );
-
-  const displayName = session?.user.displayName ?? "Usuario";
   const city = session?.user.city?.trim() ?? "";
 
   const openCityPicker = () => {
@@ -87,6 +72,7 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="never"
         data={listData}
+        removeClippedSubviews={false}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={
@@ -114,64 +100,43 @@ export default function HomeScreen() {
         }
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <View
-              style={[styles.headerBar, { paddingTop: insets.top + 12 }]}
-            >
-              <View style={styles.headerRow}>
-                <View style={styles.headerIdentity}>
+            <TabScreenHeader
+              showNotifications={Boolean(session?.accessToken)}
+              onPressNotifications={() => router.push("/notifications")}
+            />
+
+            <View style={styles.hero}>
+              {session?.accessToken ? (
+                <View style={styles.heroTitleStack}>
+                  <Text style={styles.heroPreLine}>Lugares para</Text>
+                  <Text style={styles.heroPreLine}>visitar en</Text>
                   <Pressable
-                    accessibilityLabel="Ir al perfil"
+                    accessibilityHint="Abre el selector de ciudad"
+                    accessibilityLabel="Cambiar ciudad"
                     accessibilityRole="button"
-                    hitSlop={6}
-                    onPress={() => router.push("/profile")}
+                    hitSlop={{ bottom: 8, left: 4, right: 4, top: 8 }}
+                    onPress={openCityPicker}
+                    style={styles.heroCityTap}
                   >
-                    <AvatarBadge name={displayName} size={48} />
-                  </Pressable>
-                  <View style={styles.headerTitles}>
-                    <Text numberOfLines={1} style={styles.userName}>
-                      {displayName}
+                    <Text style={styles.heroCity}>
+                      {city || "elegí tu ciudad"}
                     </Text>
-                    {session?.accessToken ? (
-                      <Pressable
-                        accessibilityLabel="Cambiar ciudad"
-                        accessibilityRole="button"
-                        hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
-                        onPress={openCityPicker}
-                        style={styles.cityPressable}
-                      >
-                        <Text
-                          numberOfLines={2}
-                          style={[
-                            styles.city,
-                            !city ? styles.cityPlaceholder : null,
-                          ]}
-                        >
-                          {city || "Tocá para elegir tu ciudad"}
-                        </Text>
-                      </Pressable>
-                    ) : city ? (
-                      <Text numberOfLines={2} style={styles.city}>
-                        {city}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                {session?.accessToken ? (
-                  <Pressable
-                    accessibilityLabel="Notificaciones"
-                    accessibilityRole="button"
-                    hitSlop={12}
-                    onPress={() => router.push("/notifications")}
-                    style={styles.headerBell}
-                  >
                     <Ionicons
-                      color={fecaTheme.colors.primary}
-                      name="notifications-outline"
-                      size={24}
+                      color={fecaTheme.colors.onSurface}
+                      name="chevron-down"
+                      size={26}
                     />
                   </Pressable>
-                ) : null}
-              </View>
+                </View>
+              ) : (
+                <View style={styles.heroTitleStack}>
+                  <Text style={styles.heroPreLine}>Lugares para</Text>
+                  <Text style={styles.heroPreLine}>visitar en tu ciudad</Text>
+                  <Text style={styles.heroCityMuted}>
+                    Iniciá sesión para elegir y cambiar la ciudad
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.sliderSection}>
@@ -185,12 +150,9 @@ export default function HomeScreen() {
 
             <View style={styles.feedIntro}>
               {session?.accessToken && !showTrustFallbackInvite ? (
-                <View style={styles.feedHeading}>
-                  <Text style={styles.feedSectionTitle}>De quienes seguís</Text>
-                  <Text style={styles.feedSectionSubtitle}>
-                    Visitas y reseñas de quienes te importan
-                  </Text>
-                </View>
+                <Text style={styles.activitySectionTitle}>
+                  Actividad reciente
+                </Text>
               ) : null}
 
               {showTrustFallbackInvite ? (
@@ -214,16 +176,15 @@ export default function HomeScreen() {
                     </Pressable>
                   </View>
 
+                  <Text style={styles.activitySectionTitle}>
+                    Actividad reciente
+                  </Text>
                   <View style={styles.popularHeader}>
                     <Text style={styles.popularEyebrow}>
                       Confianza en {city.trim() ? city : "tu ciudad"}
                     </Text>
-                    <Text style={styles.popularTitle}>
-                      Ideas mientras crece tu red
-                    </Text>
                     <Text style={styles.popularSubtitle}>
-                      Cada tarjeta dice por qué la estás viendo: red, cercanía o
-                      contexto.
+                      Ideas mientras crece tu red: cada tarjeta dice por qué la ves.
                     </Text>
                   </View>
                 </>
@@ -242,10 +203,8 @@ export default function HomeScreen() {
           />
         }
         renderItem={({ item }: { item: FeedItem }) => (
-          <VisitCard
+          <ActivityFeedRow
             item={item}
-            mode="feed"
-            onAddToDiary={handleAddToDiary}
             onPress={() => setReviewVisit(item.visit)}
           />
         )}
@@ -256,12 +215,6 @@ export default function HomeScreen() {
         showPlaceLink
         visible={reviewVisit !== null}
         visit={reviewVisit}
-      />
-      <AddToDiarySheet
-        googlePlaceId={diaryPlace?.googlePlaceId}
-        onClose={() => setDiaryPlace(null)}
-        placeId={diaryPlace?.placeId ?? null}
-        visible={diaryPlace !== null}
       />
       <ChangeCitySheet
         initialCity={session?.user.city ?? ""}
@@ -282,32 +235,69 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   listHeader: {
-    marginBottom: fecaTheme.spacing.lg,
+    marginBottom: fecaTheme.spacing.md,
     marginHorizontal: -fecaTheme.spacing.lg,
+  },
+  hero: {
+    paddingBottom: fecaTheme.spacing.xl,
+    paddingHorizontal: fecaTheme.spacing.lg,
+    paddingTop: fecaTheme.spacing.lg,
+  },
+  /** Título en tres líneas fijas: “Lugares para” / “visitar en” / ciudad */
+  heroTitleStack: {
+    alignItems: "flex-start",
+    gap: 0,
+    maxWidth: "100%",
+  },
+  heroPreLine: {
+    color: fecaTheme.colors.onSurface,
+    fontFamily: "Newsreader_500Medium_Italic",
+    fontSize: 40,
+    letterSpacing: -0.4,
+    lineHeight: 44,
+    marginBottom: -2,
+  },
+  heroCityTap: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 1,
+    gap: 4,
+    marginTop: -2,
+    maxWidth: "100%",
+  },
+  heroCity: {
+    color: fecaTheme.colors.onSurface,
+    flexShrink: 1,
+    fontFamily: "Newsreader_700Bold_Italic",
+    fontSize: 44,
+    letterSpacing: -0.5,
+    lineHeight: 48,
+    textDecorationColor: fecaTheme.colors.onSurface,
+    textDecorationLine: "underline",
+  },
+  heroCityMuted: {
+    color: fecaTheme.colors.muted,
+    fontFamily: "Newsreader_500Medium_Italic",
+    fontSize: 18,
+    lineHeight: 24,
+    marginTop: 4,
+    maxWidth: "100%",
   },
   sliderSection: {
     paddingHorizontal: fecaTheme.spacing.lg,
-    paddingTop: fecaTheme.spacing.md,
+    paddingTop: fecaTheme.spacing.sm,
   },
   feedIntro: {
     gap: fecaTheme.spacing.lg,
     paddingBottom: fecaTheme.spacing.sm,
     paddingHorizontal: fecaTheme.spacing.lg,
-    paddingTop: fecaTheme.spacing.xs,
+    paddingTop: fecaTheme.spacing.lg,
   },
-  feedHeading: {
-    gap: fecaTheme.spacing.xxs,
-  },
-  feedSectionTitle: {
-    ...fecaTheme.typography.headline,
+  activitySectionTitle: {
     color: fecaTheme.colors.onSurface,
+    fontFamily: "Newsreader_500Medium_Italic",
     fontSize: 22,
     lineHeight: 28,
-  },
-  feedSectionSubtitle: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.muted,
-    lineHeight: 18,
   },
   inviteCard: {
     backgroundColor: fecaTheme.surfaces.low,
@@ -338,7 +328,6 @@ const styles = StyleSheet.create({
   },
   popularHeader: {
     gap: fecaTheme.spacing.xxs,
-    marginBottom: fecaTheme.spacing.sm,
   },
   popularEyebrow: {
     ...fecaTheme.typography.label,
@@ -346,64 +335,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
-  popularTitle: {
-    ...fecaTheme.typography.title,
-    color: fecaTheme.colors.onSurface,
-  },
   popularSubtitle: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.muted,
     lineHeight: 18,
-    marginTop: fecaTheme.spacing.xxs,
-  },
-  headerBar: {
-    paddingBottom: fecaTheme.spacing.md,
-    paddingHorizontal: fecaTheme.spacing.lg,
-  },
-  headerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  headerIdentity: {
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    gap: fecaTheme.spacing.md,
-    marginRight: fecaTheme.spacing.sm,
-    minWidth: 0,
-  },
-  headerTitles: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  headerBell: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  userName: {
-    ...fecaTheme.typography.bodyStrong,
-    color: fecaTheme.colors.primary,
-    fontSize: 17,
-    lineHeight: 22,
-  },
-  cityPressable: {
-    alignSelf: "flex-start",
-  },
-  city: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.primary,
-    fontSize: 12,
-    lineHeight: 16,
-    opacity: 0.78,
-  },
-  cityPlaceholder: {
-    fontStyle: "italic",
-    opacity: 0.65,
   },
   separator: {
-    height: fecaTheme.spacing.lg,
+    height: fecaTheme.spacing.md,
   },
   centered: {
     alignItems: "center",

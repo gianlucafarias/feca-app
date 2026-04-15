@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(27, 28, 26, 0.45)",
+    backgroundColor: fecaTheme.colors.scrim,
   },
   sheet: {
     backgroundColor: fecaTheme.surfaces.lowest,

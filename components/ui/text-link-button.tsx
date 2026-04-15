@@ -23,6 +23,6 @@ const styles = StyleSheet.create({
   label: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.muted,
-    fontFamily: "Manrope_500Medium",
+    fontFamily: "PlusJakartaSans_500Medium",
   },
 });

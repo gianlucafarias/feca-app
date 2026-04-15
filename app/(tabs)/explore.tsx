@@ -1,51 +1,53 @@
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
+  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
-  Text,
+  TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NearbyPlaceCard } from "@/components/cards/nearby-place-card";
-import { Chip } from "@/components/ui/chip";
+import { ExploreHeader } from "@/components/explore/explore-header";
+import { ExploreQuickChip } from "@/components/explore/explore-quick-chip";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FormField } from "@/components/ui/form-field";
 import { PageBackground } from "@/components/ui/page-background";
 import { fetchExploreContext, fetchNearbyPlaces } from "@/lib/api/places";
-import {
-  EXPLORE_CONTEXTS,
-  type ExploreContextId,
-} from "@/lib/explore-contexts";
+import type { ExploreContextId } from "@/lib/explore-contexts";
 import { useAuth } from "@/providers/auth-provider";
 import { fecaTheme } from "@/theme/feca";
 import type { NearbyPlace } from "@/types/places";
 
-type TypeFilter = "all" | "cafe" | "restaurant";
-
 const DEBOUNCE_MS = 400;
 
+type QuickMode = "near" | "wifi" | "specialty";
+
 export default function ExploreScreen() {
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
 
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<TypeFilter>("all");
-  const [contextFilter, setContextFilter] = useState<ExploreContextId | null>(
-    null,
-  );
+  const [quickMode, setQuickMode] = useState<QuickMode>("near");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<TextInput>(null);
 
   const lat = session?.user.lat;
   const lng = session?.user.lng;
   const accessToken = session?.accessToken;
 
   const search = useCallback(
-    async (searchQuery: string, typeFilter: TypeFilter) => {
+    async (searchQuery: string, modeOverride?: QuickMode) => {
       if (!accessToken) {
         setPlaces([]);
         setIsLoading(false);
@@ -56,15 +58,44 @@ export default function ExploreScreen() {
       setIsLoading(true);
       setError(null);
 
+      const mode = modeOverride ?? quickMode;
+      const q = searchQuery.trim();
+
       try {
-        const results = await fetchNearbyPlaces({
-          accessToken,
-          lat: lat ?? undefined,
-          lng: lng ?? undefined,
-          query: searchQuery.trim() || undefined,
-          type: typeFilter === "all" ? undefined : typeFilter,
-        });
-        setPlaces(results);
+        if (q) {
+          const type = mode === "specialty" ? "cafe" : undefined;
+          const results = await fetchNearbyPlaces({
+            accessToken,
+            lat: lat ?? undefined,
+            lng: lng ?? undefined,
+            query: q,
+            type,
+          });
+          setPlaces(results);
+        } else if (mode === "wifi") {
+          const results = await fetchExploreContext({
+            accessToken,
+            intent: "work_2h" as ExploreContextId,
+            lat: lat ?? undefined,
+            lng: lng ?? undefined,
+          });
+          setPlaces(results);
+        } else if (mode === "specialty") {
+          const results = await fetchNearbyPlaces({
+            accessToken,
+            lat: lat ?? undefined,
+            lng: lng ?? undefined,
+            type: "cafe",
+          });
+          setPlaces(results);
+        } else {
+          const results = await fetchNearbyPlaces({
+            accessToken,
+            lat: lat ?? undefined,
+            lng: lng ?? undefined,
+          });
+          setPlaces(results);
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "No se pudieron cargar los lugares";
@@ -74,244 +105,199 @@ export default function ExploreScreen() {
         setIsLoading(false);
       }
     },
-    [accessToken, lat, lng],
+    [accessToken, lat, lng, quickMode],
   );
 
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   useEffect(() => {
-    if (contextFilter != null) {
-      if (!accessToken) {
-        setPlaces([]);
-        setIsLoading(false);
-        setError(null);
-      } else {
-        setIsLoading(true);
-        setError(null);
-        void fetchExploreContext({
-          accessToken,
-          intent: contextFilter,
-          lat: lat ?? undefined,
-          lng: lng ?? undefined,
-        })
-          .then((results) => {
-            setPlaces(results);
-          })
-          .catch((err) => {
-            const message =
-              err instanceof Error
-                ? err.message
-                : "No se pudieron cargar los contextos";
-            setError(message);
-            setPlaces([]);
-          })
-          .finally(() => {
-            setIsLoading(false);
-          });
-      }
-      return;
-    }
-    void search("", filter);
-  }, [accessToken, contextFilter, filter, lat, lng, search]);
+    void searchRef.current(queryRef.current);
+  }, [accessToken, lat, lng]);
 
   const handleQueryChange = useCallback(
     (text: string) => {
       setQuery(text);
-      if (contextFilter != null) {
-        setContextFilter(null);
-      }
-
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
-
       debounceRef.current = setTimeout(() => {
-        void search(text, filter);
+        void search(text);
       }, DEBOUNCE_MS);
     },
-    [filter, search, contextFilter],
+    [search],
   );
 
-  const handleFilterChange = useCallback(
-    (next: TypeFilter) => {
-      setFilter(next);
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-      if (contextFilter != null) {
-        setContextFilter(null);
-      }
-      void search(query, next);
-    },
-    [query, search, contextFilter],
-  );
-
-  const selectContext = useCallback((id: ExploreContextId) => {
+  const selectQuickMode = useCallback((mode: QuickMode) => {
     setQuery("");
-    setContextFilter((current) => (current === id ? null : id));
-  }, []);
+    setQuickMode(mode);
+    void search("", mode);
+  }, [search]);
+
+  const filtersActive = !query.trim();
 
   const hasLocation = lat != null && lng != null;
 
-  const contextLabel = contextFilter
-    ? EXPLORE_CONTEXTS.find((c) => c.id === contextFilter)?.label
-    : null;
+  const openMapsNearby = useCallback(() => {
+    if (lat != null && lng != null) {
+      void Linking.openURL(
+        `https://www.google.com/maps/search/café/@${lat},${lng},15z`,
+      );
+      return;
+    }
+    void Linking.openURL("https://www.google.com/maps/search/café/");
+  }, [lat, lng]);
 
   return (
     <PageBackground>
-      <FlatList
-        contentContainerStyle={styles.content}
-        contentInsetAdjustmentBehavior="automatic"
-        data={places}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        keyExtractor={(item) => item.googlePlaceId}
-        ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator color={fecaTheme.colors.primary} size="large" />
-            </View>
-          ) : !hasLocation ? (
-            <EmptyState
-              description="Activa tu ubicación o vuelve a onboarding para completar tu ciudad."
-              icon="location-outline"
-              title="Sin ubicación"
-            />
-          ) : error ? (
-            <EmptyState
-              description={error}
-              icon="cloud-offline-outline"
-              title="Error al buscar"
-            />
-          ) : (
-            <EmptyState
-              description="Probá otro momento o limpiá la búsqueda."
-              icon="map-outline"
-              title="Sin resultados"
-            />
-          )
-        }
-        ListHeaderComponent={
-          <View style={styles.headerWrap}>
-            <Text style={styles.screenTitle}>Explorar</Text>
-            <Text style={styles.screenSubtitle}>
-              Elegí un momento: te sugerimos lugares con intención. El
-              buscador sigue acá para cuando ya sabés qué buscar.
-            </Text>
+      <View style={styles.screenWrap}>
+        <FlatList
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: 140 + insets.bottom },
+          ]}
+          contentInsetAdjustmentBehavior="never"
+          data={places}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          keyExtractor={(item) => item.googlePlaceId}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            isLoading ? (
+              <View style={styles.centered}>
+                <ActivityIndicator color={fecaTheme.colors.primary} size="large" />
+              </View>
+            ) : !hasLocation ? (
+              <EmptyState
+                description="Activá tu ubicación o volvé al onboarding para completar tu ciudad."
+                icon="location-outline"
+                title="Sin ubicación"
+              />
+            ) : error ? (
+              <EmptyState
+                description={error}
+                icon="cloud-offline-outline"
+                title="Error al buscar"
+              />
+            ) : (
+              <EmptyState
+                description="Probá otro término o cambiá los filtros."
+                icon="map-outline"
+                title="Sin resultados"
+              />
+            )
+          }
+          ListHeaderComponent={
+            <View>
+              <ExploreHeader
+                onPressMenu={() => router.push("/(tabs)/profile")}
+                onPressSearch={() => searchInputRef.current?.focus()}
+              />
 
-            <ScrollView
-              horizontal
-              contentContainerStyle={styles.contextRow}
-              showsHorizontalScrollIndicator={false}
-            >
-              {EXPLORE_CONTEXTS.map((ctx) => (
-                <Chip
-                  key={ctx.id}
-                  label={ctx.label}
-                  onPress={() => selectContext(ctx.id)}
-                  selected={contextFilter === ctx.id}
+              <View style={styles.searchShell}>
+                <Ionicons
+                  color={fecaTheme.colors.muted}
+                  name="search-outline"
+                  size={20}
+                  style={styles.searchIcon}
                 />
-              ))}
-            </ScrollView>
+                <TextInput
+                  ref={searchInputRef}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={handleQueryChange}
+                  placeholder="Buscar granos, barrios o baristas…"
+                  placeholderTextColor={fecaTheme.colors.muted}
+                  selectionColor={fecaTheme.colors.primary}
+                  style={styles.searchInput}
+                  value={query}
+                  {...(Platform.OS === "android"
+                    ? { includeFontPadding: false }
+                    : {})}
+                />
+              </View>
 
-            {contextFilter ? (
-              <Text style={styles.contextHint}>
-                {EXPLORE_CONTEXTS.find((c) => c.id === contextFilter)?.subtitle}
-              </Text>
-            ) : null}
-
-            <FormField
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={handleQueryChange}
-              placeholder="Buscar café, restaurante..."
-              value={query}
-            />
-
-            <View style={styles.filters}>
-              <Chip
-                label="Todo"
-                onPress={() => handleFilterChange("all")}
-                selected={filter === "all"}
-              />
-              <Chip
-                label="Café"
-                onPress={() => handleFilterChange("cafe")}
-                selected={filter === "cafe"}
-              />
-              <Chip
-                label="Restaurante"
-                onPress={() => handleFilterChange("restaurant")}
-                selected={filter === "restaurant"}
-              />
+              <ScrollView
+                horizontal
+                contentContainerStyle={styles.chipRow}
+                showsHorizontalScrollIndicator={false}
+              >
+                <ExploreQuickChip
+                  emphasis="strong"
+                  icon="navigate"
+                  label="Cerca de mí"
+                  selected={filtersActive && quickMode === "near"}
+                  onPress={() => selectQuickMode("near")}
+                />
+                <ExploreQuickChip
+                  icon="wifi"
+                  label="Wifi gratis"
+                  selected={filtersActive && quickMode === "wifi"}
+                  onPress={() => selectQuickMode("wifi")}
+                />
+                <ExploreQuickChip
+                  icon="cafe-outline"
+                  label="Café de especialidad"
+                  selected={filtersActive && quickMode === "specialty"}
+                  onPress={() => selectQuickMode("specialty")}
+                />
+              </ScrollView>
             </View>
+          }
+          removeClippedSubviews={false}
+          renderItem={({ item }) => <NearbyPlaceCard place={item} />}
+          showsVerticalScrollIndicator={false}
+        />
 
-            <View style={styles.listHeading}>
-              <Text style={styles.listTitle}>
-                {contextLabel ? contextLabel : "Lugares"}
-              </Text>
-              {!isLoading ? (
-                <Text style={styles.listMeta}>
-                  {places.length}{" "}
-                  {places.length === 1 ? "resultado" : "resultados"}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        }
-        renderItem={({ item }) => <NearbyPlaceCard place={item} />}
-        showsVerticalScrollIndicator={false}
-      />
+        <Pressable
+          accessibilityLabel="Abrir mapa de cafés cercanos"
+          accessibilityRole="button"
+          onPress={openMapsNearby}
+          style={[
+            styles.mapFab,
+            { bottom: 108 + insets.bottom, right: fecaTheme.spacing.lg },
+          ]}
+        >
+          <Ionicons color={fecaTheme.colors.surfaceBright} name="map" size={22} />
+        </Pressable>
+      </View>
     </PageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  screenWrap: {
+    flex: 1,
+  },
   content: {
-    paddingBottom: 140,
     paddingHorizontal: fecaTheme.spacing.lg,
-    paddingTop: fecaTheme.spacing.xxl,
+    paddingTop: 0,
   },
-  headerWrap: {
-    gap: fecaTheme.spacing.lg,
-    marginBottom: fecaTheme.spacing.lg,
-  },
-  screenTitle: {
-    ...fecaTheme.typography.headline,
-    color: fecaTheme.colors.onSurface,
-    paddingHorizontal: fecaTheme.spacing.xs,
-  },
-  screenSubtitle: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.muted,
-    lineHeight: 18,
-    paddingHorizontal: fecaTheme.spacing.xs,
-  },
-  contextRow: {
-    flexDirection: "row",
-    gap: fecaTheme.spacing.sm,
-    paddingVertical: fecaTheme.spacing.xxs,
-  },
-  contextHint: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.primary,
-    paddingHorizontal: fecaTheme.spacing.xs,
-  },
-  filters: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: fecaTheme.spacing.sm,
-  },
-  listHeading: {
+  searchShell: {
     alignItems: "center",
+    backgroundColor: fecaTheme.surfaces.low,
+    borderRadius: fecaTheme.radii.pill,
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: fecaTheme.spacing.xs,
+    marginBottom: fecaTheme.spacing.lg,
+    minHeight: 52,
+    paddingHorizontal: fecaTheme.spacing.md,
   },
-  listTitle: {
-    ...fecaTheme.typography.bodyStrong,
+  searchIcon: {
+    marginRight: fecaTheme.spacing.sm,
+  },
+  searchInput: {
+    ...fecaTheme.typography.body,
     color: fecaTheme.colors.onSurface,
+    flex: 1,
+    minHeight: 48,
+    paddingVertical: fecaTheme.spacing.sm,
   },
-  listMeta: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.muted,
+  chipRow: {
+    flexDirection: "row",
+    gap: fecaTheme.spacing.sm,
+    marginBottom: fecaTheme.spacing.xl,
+    paddingVertical: 2,
   },
   separator: {
     height: fecaTheme.spacing.lg,
@@ -319,5 +305,15 @@ const styles = StyleSheet.create({
   centered: {
     alignItems: "center",
     paddingVertical: fecaTheme.spacing.xxl,
+  },
+  mapFab: {
+    alignItems: "center",
+    backgroundColor: fecaTheme.colors.primaryDim,
+    borderRadius: fecaTheme.radii.pill,
+    height: 56,
+    justifyContent: "center",
+    position: "absolute",
+    width: 56,
+    ...fecaTheme.elevation.floating,
   },
 });

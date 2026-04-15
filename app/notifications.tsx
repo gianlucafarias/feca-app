@@ -19,7 +19,7 @@ import {
   markNotificationRead,
 } from "@/lib/api/notifications";
 import { useAuth } from "@/providers/auth-provider";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { ApiNotification } from "@/types/api";
 
 const timeFormatter = new Intl.DateTimeFormat("es-UY", {
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     paddingVertical: fecaTheme.spacing.md,
   },
   rowUnread: {
-    backgroundColor: "rgba(81, 100, 67, 0.08)",
+    backgroundColor: hexToRgba(fecaTheme.colors.primary, 0.08),
   },
   rowBody: {
     flex: 1,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   },
   dot: {
     backgroundColor: fecaTheme.colors.primary,
-    borderRadius: 4,
+    borderRadius: fecaTheme.radii.pill,
     height: 8,
     width: 8,
   },

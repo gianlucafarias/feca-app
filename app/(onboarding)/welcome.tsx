@@ -41,7 +41,7 @@ const SLIDES: SlideDef[] = [
     icon: "cafe-outline",
     title: "Cada salida,\ncon detalle",
     body: "Nota, rating y sensaciones: tu huella de gusto queda registrada.",
-    gradient: ["#f2efe9", "#f4f0e8", "#faf7f2"] as const,
+    gradient: ["#fcf9f6", "#f6f3f0", "#fffefb"] as const,
   },
   {
     step: "2",
@@ -49,7 +49,7 @@ const SLIDES: SlideDef[] = [
     icon: "bookmark-outline",
     title: "Guías e\nintenciones",
     body: "Guardá lo que querés probar y armá recorridos para compartir.",
-    gradient: ["#f2efe9", "#f2ebe4", "#f9f6f0"] as const,
+    gradient: ["#fcf9f6", "#f0edea", "#f6f3f0"] as const,
   },
   {
     step: "3",
@@ -57,7 +57,7 @@ const SLIDES: SlideDef[] = [
     icon: "people-outline",
     title: "Lo que hacen\nquienes seguís",
     body: "Descubrí visitas y señales de amigos en un solo feed.",
-    gradient: ["#f2efe9", "#eef2ea", "#fbfaf7"] as const,
+    gradient: ["#fcf9f6", "#f6f3f0", "#E4E6EA"] as const,
   },
 ];
 
@@ -462,11 +462,11 @@ const styles = StyleSheet.create({
   },
   dot: {
     height: 5,
-    borderRadius: 3,
+    borderRadius: fecaTheme.radii.pill,
   },
   dotIdle: {
     width: 5,
-    backgroundColor: "rgba(27, 28, 26, 0.2)",
+    backgroundColor: fecaTheme.colors.scrimSubtle,
   },
   dotActive: {
     width: 24,
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     gap: fecaTheme.spacing.sm,
   },
   ctaMainLabel: {
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 16,
     color: fecaTheme.colors.onPrimary,
   },
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(242, 239, 233, 0.92)",
+    backgroundColor: fecaTheme.colors.glassMedium,
   },
   miniSplashBrand: {
     ...fecaTheme.typography.logo,

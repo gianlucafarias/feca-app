@@ -97,9 +97,7 @@ const styles = StyleSheet.create({
   followBtn: {
     alignItems: "center",
     backgroundColor: fecaTheme.colors.primary,
-    borderColor: fecaTheme.colors.primary,
     borderRadius: fecaTheme.radii.pill,
-    borderWidth: 1.5,
     flexDirection: "row",
     gap: 4,
     minWidth: 108,
@@ -108,7 +106,7 @@ const styles = StyleSheet.create({
     paddingVertical: fecaTheme.spacing.xs,
   },
   followBtnOutline: {
-    backgroundColor: "transparent",
+    backgroundColor: fecaTheme.surfaces.container,
   },
   followLabel: {
     ...fecaTheme.typography.bodyStrong,

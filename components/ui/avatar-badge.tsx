@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: fecaTheme.colors.onPrimary,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 14,
     lineHeight: 18,
   },

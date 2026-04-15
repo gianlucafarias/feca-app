@@ -15,6 +15,7 @@ import {
 import { PlanHeroCard } from "@/components/cards/plan-hero-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBackground } from "@/components/ui/page-background";
+import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { fetchMyGroups } from "@/lib/api/groups";
 import { mapApiGroupToFecaGroup } from "@/lib/feca/map-api-social";
 import { useAuth } from "@/providers/auth-provider";
@@ -63,6 +64,10 @@ export default function PlansScreen() {
 
   return (
     <PageBackground>
+      <TabScreenHeader
+        showNotifications
+        onPressNotifications={() => router.push("/notifications")}
+      />
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Planes</Text>
@@ -117,7 +122,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: fecaTheme.spacing.md,
     paddingHorizontal: fecaTheme.spacing.lg,
-    paddingTop: fecaTheme.spacing.xxl,
+    paddingTop: fecaTheme.spacing.md,
   },
   title: {
     fontFamily: "Newsreader_700Bold",

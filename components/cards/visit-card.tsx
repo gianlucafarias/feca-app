@@ -11,7 +11,7 @@ import { formatVisitDate } from "@/lib/format";
 import { fetchPlaceSaved } from "@/lib/api/saved";
 import { getVisitCardImageUri } from "@/lib/visit-image";
 import { useAuth } from "@/providers/auth-provider";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { FeedItem, Visit } from "@/types/feca";
 
 type VisitCardProps =
@@ -94,9 +94,9 @@ export function VisitCard(props: VisitCardProps) {
       />
       <LinearGradient
         colors={[
-          "rgba(27,28,26,0)",
-          "rgba(27,28,26,0.38)",
-          "rgba(12,12,11,0.82)",
+          hexToRgba(fecaTheme.colors.onSurface, 0),
+          hexToRgba(fecaTheme.colors.onSurface, 0.38),
+          hexToRgba(fecaTheme.colors.onSurface, 0.85),
         ]}
         locations={[0, 0.4, 1]}
         style={styles.imageGradient}
@@ -112,7 +112,7 @@ export function VisitCard(props: VisitCardProps) {
                 color={
                   i < visit.rating
                     ? fecaTheme.colors.secondary
-                    : "rgba(255,255,255,0.28)"
+                    : hexToRgba(fecaTheme.colors.onPrimary, 0.28)
                 }
                 name={i < visit.rating ? "star" : "star-outline"}
                 size={20}
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   },
   imageDateFooter: {
     alignItems: "center",
-    backgroundColor: "rgba(12,12,11,0.97)",
+    backgroundColor: hexToRgba(fecaTheme.colors.onSurface, 0.97),
     borderBottomLeftRadius: fecaTheme.radii.md,
     borderBottomRightRadius: fecaTheme.radii.md,
     bottom: 0,
@@ -360,13 +360,13 @@ const styles = StyleSheet.create({
   },
   imageDateFooterText: {
     ...fecaTheme.typography.meta,
-    color: "rgba(255,253,249,0.92)",
+    color: hexToRgba(fecaTheme.colors.paper, 0.92),
     fontSize: 13,
     letterSpacing: 0.3,
   },
   overlayHandle: {
     ...fecaTheme.typography.meta,
-    color: "rgba(255,253,249,0.78)",
+    color: hexToRgba(fecaTheme.colors.paper, 0.78),
     fontSize: 12,
     lineHeight: 16,
   },
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     color: fecaTheme.surfaces.lowest,
     fontSize: 24,
     lineHeight: 30,
-    textShadowColor: "rgba(27,28,26,0.5)",
+    textShadowColor: hexToRgba(fecaTheme.colors.onSurface, 0.5),
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 10,
   },
@@ -392,10 +392,10 @@ const styles = StyleSheet.create({
   },
   overlayNeighborhood: {
     ...fecaTheme.typography.bodyStrong,
-    color: "rgba(255,253,249,0.95)",
+    color: hexToRgba(fecaTheme.colors.paper, 0.95),
     fontSize: 14,
     lineHeight: 20,
-    textShadowColor: "rgba(27,28,26,0.4)",
+    textShadowColor: hexToRgba(fecaTheme.colors.onSurface, 0.4),
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
@@ -411,11 +411,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   footerActions: {
-    borderTopColor: fecaTheme.colors.outlineVariant,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: fecaTheme.surfaces.low,
     flexDirection: "row",
+    marginTop: fecaTheme.spacing.sm,
     paddingHorizontal: fecaTheme.spacing.md,
-    paddingVertical: fecaTheme.spacing.xs,
+    paddingVertical: fecaTheme.spacing.sm,
   },
   footerActionBtn: {
     alignItems: "center",

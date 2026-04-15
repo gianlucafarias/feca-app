@@ -1,8 +1,24 @@
 import type { ExpoConfig } from "expo/config";
 
-const googleIosUrlScheme =
-  process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME ??
-  "com.googleusercontent.apps.replace-me";
+/**
+ * URL scheme que iOS usa para el redirect de OAuth (REVERSED_CLIENT_ID).
+ * Debe ser `com.googleusercontent.apps.` + la parte del Client ID iOS antes de `.apps.googleusercontent.com`.
+ * Si solo configurás `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, se deduce solo.
+ */
+function getGoogleIosUrlScheme(): string {
+  const explicit = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
+  if (iosClientId?.endsWith(".apps.googleusercontent.com")) {
+    const prefix = iosClientId.replace(/\.apps\.googleusercontent\.com$/i, "");
+    return `com.googleusercontent.apps.${prefix}`;
+  }
+  return "com.googleusercontent.apps.replace-me";
+}
+
+const googleIosUrlScheme = getGoogleIosUrlScheme();
 
 const config: ExpoConfig = {
   name: "feca",
@@ -14,6 +30,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
+    bundleIdentifier: "com.feca.app",
     supportsTablet: true,
     infoPlist: {
       LSApplicationQueriesSchemes: [

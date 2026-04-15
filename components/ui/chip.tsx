@@ -18,9 +18,7 @@ export function Chip({ label, selected = false, onPress }: ChipProps) {
         pressed && styles.pressed,
       ]}
     >
-      <Text style={[styles.label, selected ? styles.selectedLabel : null]}>
-        {label}
-      </Text>
+      <Text style={[styles.label, selected ? styles.selectedLabel : null]}>{label}</Text>
     </Pressable>
   );
 }
@@ -34,18 +32,18 @@ const styles = StyleSheet.create({
     paddingVertical: fecaTheme.spacing.xs,
   },
   idle: {
-    backgroundColor: fecaTheme.surfaces.high,
+    backgroundColor: fecaTheme.surfaces.highest,
   },
   selected: {
-    backgroundColor: "rgba(81, 100, 67, 0.14)",
+    backgroundColor: fecaTheme.colors.secondaryFixed,
   },
   label: {
     ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.onSurface,
+    color: fecaTheme.colors.onSurfaceVariant,
   },
   selectedLabel: {
-    color: fecaTheme.colors.primary,
-    fontFamily: "Manrope_600SemiBold",
+    color: fecaTheme.colors.onSecondaryFixed,
+    fontFamily: "PlusJakartaSans_600SemiBold",
   },
   pressed: {
     opacity: 0.82,

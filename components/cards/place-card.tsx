@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.primary,
     fontSize: 12,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
   },
   footerMeta: {
     ...fecaTheme.typography.meta,

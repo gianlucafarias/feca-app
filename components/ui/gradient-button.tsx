@@ -15,6 +15,11 @@ type GradientButtonProps = Omit<PressableProps, "style"> & {
   style?: StyleProp<ViewStyle>;
 };
 
+const disabledGradient = [
+  fecaTheme.surfaces.container,
+  fecaTheme.surfaces.high,
+] as const;
+
 export function GradientButton({
   disabled,
   label,
@@ -35,8 +40,8 @@ export function GradientButton({
       <LinearGradient
         colors={
           disabled
-            ? [fecaTheme.colors.outlineVariant, fecaTheme.colors.outlineVariant]
-            : [fecaTheme.colors.primary, fecaTheme.colors.primaryContainer]
+            ? [...disabledGradient]
+            : [fecaTheme.colors.secondary, fecaTheme.colors.secondaryDim]
         }
         end={{ x: 1, y: 1 }}
         start={{ x: 0, y: 0 }}
@@ -50,7 +55,7 @@ export function GradientButton({
 
 const styles = StyleSheet.create({
   outer: {
-    borderRadius: fecaTheme.radii.md,
+    borderRadius: fecaTheme.radii.pill,
     overflow: "hidden",
   },
   gradient: {
@@ -65,7 +70,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   labelDisabled: {
-    color: "rgba(255,255,255,0.6)",
+    color: fecaTheme.colors.onSurfaceVariant,
   },
   pressed: {
     opacity: 0.88,

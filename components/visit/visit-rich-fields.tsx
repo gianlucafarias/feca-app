@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Chip } from "@/components/ui/chip";
 import { FormField } from "@/components/ui/form-field";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { RichVisitDraft } from "@/types/feca";
 
 type VisitRichFieldsProps = {
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     minWidth: 40,
   },
   scaleDotActive: {
-    backgroundColor: "rgba(81, 100, 67, 0.2)",
+    backgroundColor: hexToRgba(fecaTheme.colors.primary, 0.2),
   },
   scaleDotPressed: {
     opacity: 0.85,

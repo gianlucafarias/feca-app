@@ -266,18 +266,15 @@ const styles = StyleSheet.create({
     marginTop: fecaTheme.spacing.xs,
   },
   suggestionsBox: {
-    backgroundColor: fecaTheme.surfaces.lowest,
-    borderColor: fecaTheme.colors.outlineVariant,
-    borderRadius: fecaTheme.radii.sm,
-    borderWidth: 1,
+    backgroundColor: fecaTheme.surfaces.container,
+    borderRadius: fecaTheme.radii.md,
     marginTop: fecaTheme.spacing.xs,
     overflow: "hidden",
+    ...fecaTheme.elevation.ambient,
   },
   suggestionRow: {
-    borderBottomColor: fecaTheme.colors.outlineVariant,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: fecaTheme.spacing.md,
-    paddingVertical: fecaTheme.spacing.sm,
+    paddingVertical: fecaTheme.spacing.md,
   },
   suggestionRowPressed: {
     backgroundColor: fecaTheme.surfaces.high,

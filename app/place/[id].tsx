@@ -24,7 +24,7 @@ import { fetchPlaceDetail, resolveGooglePlace } from "@/lib/api/places";
 import { fetchPlaceSaved } from "@/lib/api/saved";
 import { formatRelativeVisitTime } from "@/lib/format";
 import { useAuth } from "@/providers/auth-provider";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type {
   FecaPlaceReview,
   GoogleReview,
@@ -266,15 +266,15 @@ export default function PlaceDetailScreen() {
           )}
           <LinearGradient
             colors={[
-              "rgba(27,28,26,0.4)",
+              fecaTheme.colors.scrimMedium,
               "transparent",
-              "rgba(242,239,233,1)",
+              fecaTheme.colors.background,
             ]}
             locations={[0, 0.5, 1]}
             style={styles.heroGradient}
           />
           <Pressable onPress={() => router.back()} style={styles.heroBack}>
-            <Ionicons color="#fff" name="chevron-back" size={22} />
+            <Ionicons color={fecaTheme.colors.onPrimary} name="chevron-back" size={22} />
           </Pressable>
         </View>
 
@@ -331,14 +331,12 @@ export default function PlaceDetailScreen() {
             </View>
             <Text style={styles.statLabel}>rating</Text>
           </View>
-          <View style={styles.statDivider} />
           <View style={styles.stat}>
             <Text style={styles.statValue}>
               {place.userRatingCount ?? 0}
             </Text>
             <Text style={styles.statLabel}>reseñas Google</Text>
           </View>
-          <View style={styles.statDivider} />
           <View style={styles.stat}>
             <Text
               style={[
@@ -648,7 +646,7 @@ const styles = StyleSheet.create({
   },
   heroBack: {
     alignItems: "center",
-    backgroundColor: "rgba(27,28,26,0.3)",
+    backgroundColor: fecaTheme.colors.scrimLight,
     borderRadius: fecaTheme.radii.pill,
     height: 40,
     justifyContent: "center",
@@ -687,9 +685,8 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     alignItems: "center",
-    borderColor: fecaTheme.colors.outlineVariant,
+    backgroundColor: fecaTheme.surfaces.container,
     borderRadius: fecaTheme.radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
     gap: 8,
@@ -698,8 +695,7 @@ const styles = StyleSheet.create({
     paddingVertical: fecaTheme.spacing.sm,
   },
   actionBtnActive: {
-    backgroundColor: fecaTheme.surfaces.low,
-    borderColor: fecaTheme.colors.primary,
+    backgroundColor: fecaTheme.colors.secondaryFixed,
   },
   actionBtnLabel: {
     ...fecaTheme.typography.bodyStrong,
@@ -712,6 +708,7 @@ const styles = StyleSheet.create({
     backgroundColor: fecaTheme.surfaces.low,
     borderRadius: fecaTheme.radii.lg,
     flexDirection: "row",
+    gap: fecaTheme.spacing.md,
     marginHorizontal: fecaTheme.spacing.xl,
     marginTop: fecaTheme.spacing.xl,
     paddingHorizontal: fecaTheme.spacing.lg,
@@ -737,11 +734,6 @@ const styles = StyleSheet.create({
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.muted,
     fontSize: 12,
-  },
-  statDivider: {
-    backgroundColor: fecaTheme.colors.outlineVariant,
-    height: 24,
-    width: 1,
   },
 
   socialWrap: {
@@ -875,8 +867,6 @@ const styles = StyleSheet.create({
   },
   googleReviewsSection: {
     backgroundColor: fecaTheme.surfaces.low,
-    borderTopColor: fecaTheme.colors.outlineVariant,
-    borderTopWidth: StyleSheet.hairlineWidth,
     gap: fecaTheme.spacing.md,
     marginTop: fecaTheme.spacing.xl,
     paddingBottom: fecaTheme.spacing.lg,
@@ -885,15 +875,14 @@ const styles = StyleSheet.create({
   googleReviewsToggle: {
     alignItems: "center",
     backgroundColor: fecaTheme.surfaces.lowest,
-    borderColor: fecaTheme.colors.outlineVariant,
     borderRadius: fecaTheme.radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: fecaTheme.spacing.sm,
     justifyContent: "space-between",
     marginHorizontal: fecaTheme.spacing.xl,
     paddingHorizontal: fecaTheme.spacing.md,
     paddingVertical: fecaTheme.spacing.md,
+    ...fecaTheme.elevation.ambient,
   },
   googleReviewsTogglePressed: {
     opacity: 0.94,
@@ -951,7 +940,7 @@ const styles = StyleSheet.create({
   },
   reviewAvatarText: {
     color: fecaTheme.colors.onPrimary,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 14,
   },
   reviewHeaderText: {
@@ -972,7 +961,7 @@ const styles = StyleSheet.create({
   },
   reviewRatingBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(150, 71, 51, 0.10)",
+    backgroundColor: hexToRgba(fecaTheme.colors.secondary, 0.1),
     borderRadius: fecaTheme.radii.pill,
     flexDirection: "row",
     gap: 3,
@@ -1012,7 +1001,7 @@ const styles = StyleSheet.create({
   },
   fabLabel: {
     color: fecaTheme.colors.onPrimary,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 16,
     lineHeight: 20,
   },

@@ -15,13 +15,11 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { VisitRichFields } from "@/components/visit/visit-rich-fields";
-import { Chip } from "@/components/ui/chip";
+import { WriteReviewEditorial } from "@/components/visit/write-review-editorial";
 import { FormField } from "@/components/ui/form-field";
-import { GradientButton } from "@/components/ui/gradient-button";
 import { PageBackground } from "@/components/ui/page-background";
-import { TextLinkButton } from "@/components/ui/text-link-button";
 import {
   createManualPlaceApi,
   fetchNearbyPlaces,
@@ -30,7 +28,7 @@ import {
 import { createVisitApi } from "@/lib/api/visits";
 import { useKeyboardBottomInset } from "@/hooks/use-keyboard-bottom-inset";
 import { useAuth } from "@/providers/auth-provider";
-import { fecaTheme } from "@/theme/feca";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { PlaceCategory, RichVisitDraft } from "@/types/feca";
 import type { NearbyPlace } from "@/types/places";
 
@@ -49,6 +47,7 @@ type SelectedPlace = {
 const DEBOUNCE_MS = 400;
 
 export default function NewVisitScreen() {
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
 
   const params = useLocalSearchParams<{
@@ -83,6 +82,8 @@ export default function NewVisitScreen() {
     waitLevel: null,
     priceTier: null,
     photoUris: [],
+    hasParking: null,
+    petFriendly: null,
   });
 
   const [searchResults, setSearchResults] = useState<NearbyPlace[]>([]);
@@ -176,14 +177,6 @@ export default function NewVisitScreen() {
     setStep(nextStep);
   };
 
-  const toggleTag = (tag: PlaceCategory) => {
-    setTags((current) =>
-      current.includes(tag)
-        ? current.filter((item) => item !== tag)
-        : [...current, tag],
-    );
-  };
-
   const handlePickPlace = (place: NearbyPlace) => {
     setSelectedPlace({
       address: place.address,
@@ -253,6 +246,8 @@ export default function NewVisitScreen() {
         noiseLevel: richDraft.noiseLevel ?? undefined,
         orderedItems: richDraft.orderedItems.trim() || undefined,
         photoUrls: richDraft.photoUris,
+        petFriendly: richDraft.petFriendly === true ? true : undefined,
+        hasParking: richDraft.hasParking === true ? true : undefined,
         placeId: place.id,
         priceTier: richDraft.priceTier ?? undefined,
         rating,
@@ -278,34 +273,61 @@ export default function NewVisitScreen() {
 
   const trimmedQuery = query.trim();
 
+  const backFromDetails = () => {
+    if (params.googlePlaceId) {
+      router.back();
+    } else {
+      goToStep("search");
+    }
+  };
+
+  const writeReviewProps = {
+    isManualPlace: Boolean(selectedPlace?.isManual),
+    isSaving,
+    manualAddress,
+    note,
+    onBackFromDetails: backFromDetails,
+    onManualAddressChange: setManualAddress,
+    onNoteChange: setNote,
+    onPublish: handlePublish,
+    onRatingChange: setRating,
+    onRichDraftChange: setRichDraft,
+    placeAddress:
+      selectedPlace?.address ||
+      manualAddress ||
+      (selectedPlace?.isManual ? "" : "Lugar nuevo"),
+    placeName: selectedPlace?.name || query.trim() || "Lugar",
+    placePhotoUrl: selectedPlace?.photoUrl,
+    rating,
+    richDraft,
+    showEditPlace: !params.googlePlaceId,
+    onEditPlace: () => goToStep("search"),
+  };
+
   return (
     <PageBackground>
       <View style={styles.root}>
-        <View style={styles.topBar}>
-          <Pressable
-            onPress={() => {
-              if (step === "details" && !params.googlePlaceId) {
-                goToStep("search");
-                return;
-              }
-              router.back();
-            }}
-            style={styles.backButton}
-          >
-            <Ionicons
-              color={fecaTheme.colors.onSurface}
-              name="chevron-back"
-              size={18}
-            />
-          </Pressable>
-          <Pressable onPress={() => router.back()} style={styles.closeButton}>
-            <Ionicons
-              color={fecaTheme.colors.onSurface}
-              name="close"
-              size={20}
-            />
-          </Pressable>
-        </View>
+        {step === "search" ? (
+          <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+            <Pressable
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
+              <Ionicons
+                color={fecaTheme.colors.onSurface}
+                name="chevron-back"
+                size={18}
+              />
+            </Pressable>
+            <Pressable onPress={() => router.back()} style={styles.closeButton}>
+              <Ionicons
+                color={fecaTheme.colors.onSurface}
+                name="close"
+                size={20}
+              />
+            </Pressable>
+          </View>
+        ) : null}
 
         {step === "search" ? (
           <KeyboardAvoidingView
@@ -423,124 +445,49 @@ export default function NewVisitScreen() {
         ) : null}
 
         {step === "details" ? (
-          <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={styles.detailsScroll}
+          <View
+            style={[styles.detailsColumn, { paddingTop: insets.top }]}
           >
-            <View style={styles.placeHeader}>
-              {selectedPlace?.photoUrl ? (
-                <Image
-                  contentFit="cover"
-                  source={{ uri: selectedPlace.photoUrl }}
-                  style={styles.placeThumb}
+            <View style={styles.editorialHeader}>
+              <Pressable
+                accessibilityLabel="Cerrar"
+                hitSlop={10}
+                onPress={() => router.back()}
+                style={styles.headerSideBtn}
+              >
+                <Ionicons
+                  color={fecaTheme.colors.onSurface}
+                  name="close"
+                  size={22}
                 />
-              ) : (
-                <View style={[styles.placeThumb, styles.placeThumbFallback]}>
-                  <Ionicons
-                    color={fecaTheme.colors.muted}
-                    name="cafe-outline"
-                    size={20}
-                  />
-                </View>
-              )}
-              <View style={styles.placeHeaderText}>
-                <Text numberOfLines={1} style={styles.optionName}>
-                  {selectedPlace?.name || query.trim()}
-                </Text>
-                <Text numberOfLines={1} style={styles.optionMeta}>
-                  {selectedPlace?.address || manualAddress || "Lugar nuevo"}
-                </Text>
-              </View>
-              {!params.googlePlaceId ? (
-                <TextLinkButton label="Editar" onPress={() => goToStep("search")} />
-              ) : null}
-            </View>
-
-            <View style={styles.form}>
-              <View style={styles.block}>
-                <Text style={styles.blockLabel}>Rating</Text>
-                <View style={styles.stars}>
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <Pressable
-                      key={value}
-                      hitSlop={4}
-                      onPress={() => setRating(value)}
-                    >
-                      <Ionicons
-                        color={
-                          value <= rating
-                            ? fecaTheme.colors.secondary
-                            : fecaTheme.colors.outlineVariant
-                        }
-                        name={value <= rating ? "star" : "star-outline"}
-                        size={28}
-                      />
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.block}>
-                <Text style={styles.blockLabel}>Categoria</Text>
-                <View style={styles.row}>
-                  <Chip
-                    label="Cafe"
-                    onPress={() => toggleTag("cafe")}
-                    selected={tags.includes("cafe")}
-                  />
-                  <Chip
-                    label="Brunch"
-                    onPress={() => toggleTag("brunch")}
-                    selected={tags.includes("brunch")}
-                  />
-                </View>
-              </View>
-
-              {selectedPlace?.isManual ? (
-                <FormField
-                  label="Direccion"
-                  onChangeText={setManualAddress}
-                  placeholder="Direccion del lugar"
-                  value={manualAddress}
-                />
-              ) : null}
-
-              <FormField
-                label="Nota"
-                multiline
-                onChangeText={setNote}
-                placeholder="Algo corto o usá las plantillas abajo. Tu huella de gusto importa más que un párrafo largo."
-                value={note}
-              />
-
-              <VisitRichFields
-                draft={richDraft}
-                note={note}
-                onChange={setRichDraft}
-                onNoteChange={setNote}
-              />
-            </View>
-
-            <View style={styles.actions}>
-              <GradientButton
+              </Pressable>
+              <Text numberOfLines={1} style={styles.editorialHeaderTitle}>
+                Escribir reseña
+              </Text>
+              <Pressable
+                accessibilityLabel="Publicar reseña"
                 disabled={isSaving}
-                label={isSaving ? "Guardando..." : "Guardar"}
+                hitSlop={8}
                 onPress={handlePublish}
-              />
-              <TextLinkButton
-                label="Atras"
-                onPress={() => {
-                  if (params.googlePlaceId) {
-                    router.back();
-                  } else {
-                    goToStep("search");
-                  }
-                }}
-              />
+                style={styles.headerSideBtn}
+              >
+                <Text style={styles.editorialPostLabel}>
+                  {isSaving ? "…" : "PUBLICAR"}
+                </Text>
+              </Pressable>
             </View>
-          </ScrollView>
+
+            {Platform.OS === "android" ? (
+              <KeyboardAvoidingView
+                behavior="height"
+                style={styles.detailsKav}
+              >
+                <WriteReviewEditorial {...writeReviewProps} />
+              </KeyboardAvoidingView>
+            ) : (
+              <WriteReviewEditorial {...writeReviewProps} />
+            )}
+          </View>
         ) : null}
 
         {step === "success" ? (
@@ -575,8 +522,38 @@ const styles = StyleSheet.create({
   searchKav: {
     flex: 1,
   },
-  detailsScroll: {
+  detailsColumn: {
     flex: 1,
+  },
+  detailsKav: {
+    flex: 1,
+  },
+  editorialHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: fecaTheme.spacing.xs,
+    paddingHorizontal: fecaTheme.spacing.md,
+  },
+  headerSideBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 56,
+    paddingVertical: 4,
+  },
+  editorialHeaderTitle: {
+    color: fecaTheme.colors.onSurface,
+    flex: 1,
+    fontFamily: "Newsreader_500Medium_Italic",
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: "center",
+  },
+  editorialPostLabel: {
+    color: fecaTheme.colors.onSurface,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontSize: 12,
+    letterSpacing: 0.8,
   },
   successBackdrop: {
     flex: 1,
@@ -589,18 +566,11 @@ const styles = StyleSheet.create({
   searchScroll: {
     flex: 1,
   },
-  content: {
-    gap: fecaTheme.spacing.xxl,
-    paddingBottom: fecaTheme.spacing.xxxl,
-    paddingHorizontal: fecaTheme.spacing.xl,
-    paddingTop: fecaTheme.spacing.xl,
-  },
   topBar: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: fecaTheme.spacing.xl,
-    paddingTop: fecaTheme.spacing.xl,
   },
   backButton: {
     alignItems: "center",
@@ -672,7 +642,7 @@ const styles = StyleSheet.create({
   optionRatingText: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.onSurface,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 12,
   },
   emptyHint: {
@@ -683,7 +653,7 @@ const styles = StyleSheet.create({
   },
   createBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(81, 100, 67, 0.14)",
+    backgroundColor: hexToRgba(fecaTheme.colors.primary, 0.14),
     borderRadius: fecaTheme.radii.pill,
     height: 22,
     justifyContent: "center",
@@ -692,51 +662,6 @@ const styles = StyleSheet.create({
   createText: {
     ...fecaTheme.typography.bodyStrong,
     color: fecaTheme.colors.primary,
-  },
-  placeHeader: {
-    alignItems: "center",
-    backgroundColor: fecaTheme.surfaces.low,
-    borderRadius: fecaTheme.radii.md,
-    flexDirection: "row",
-    gap: fecaTheme.spacing.sm,
-    paddingHorizontal: fecaTheme.spacing.md,
-    paddingVertical: fecaTheme.spacing.sm,
-  },
-  placeThumb: {
-    borderRadius: fecaTheme.radii.sm,
-    height: 48,
-    width: 48,
-  },
-  placeThumbFallback: {
-    alignItems: "center",
-    backgroundColor: fecaTheme.surfaces.high,
-    justifyContent: "center",
-  },
-  placeHeaderText: {
-    flex: 1,
-    gap: 2,
-  },
-  form: {
-    gap: fecaTheme.spacing.xl,
-  },
-  block: {
-    gap: fecaTheme.spacing.sm,
-  },
-  blockLabel: {
-    ...fecaTheme.typography.label,
-    color: fecaTheme.colors.muted,
-  },
-  stars: {
-    flexDirection: "row",
-    gap: fecaTheme.spacing.sm,
-  },
-  row: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: fecaTheme.spacing.sm,
-  },
-  actions: {
-    gap: fecaTheme.spacing.md,
   },
   successWrap: {
     alignItems: "center",
