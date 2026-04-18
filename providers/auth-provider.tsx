@@ -92,19 +92,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [onboardingRoute, setOnboardingRoute] =
     useState<OnboardingRoute | null>(null);
   const refreshInFlightRef = useRef<Promise<AuthSession | null> | null>(null);
+  const sessionRef = useRef<AuthSession | null>(null);
+  // Local profile writes win over slower refresh responses for the user slice.
+  const userStateVersionRef = useRef(0);
 
-  const persistSession = useCallback(async (nextSession: AuthSession) => {
-    await writeStoredSession(nextSession);
+  const applySessionState = useCallback((nextSession: AuthSession | null) => {
+    sessionRef.current = nextSession;
     setSession(nextSession);
-    setOnboardingRoute(getOnboardingRouteForUser(nextSession.user));
+    setOnboardingRoute(
+      nextSession ? getOnboardingRouteForUser(nextSession.user) : null,
+    );
     return nextSession;
   }, []);
 
+  const persistSession = useCallback(async (nextSession: AuthSession) => {
+    await writeStoredSession(nextSession);
+    return applySessionState(nextSession);
+  }, [applySessionState]);
+
   const clearSessionState = useCallback(async () => {
     await clearStoredSession();
-    setSession(null);
-    setOnboardingRoute(null);
-  }, []);
+    applySessionState(null);
+  }, [applySessionState]);
 
   const refreshSession = useCallback(
     async (
@@ -115,12 +124,38 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return refreshInFlightRef.current;
       }
 
+      const startedUserStateVersion = userStateVersionRef.current;
+      const baseUserId = sessionRef.current?.user.id;
       const promise = refreshAuthSession(refreshToken)
-        .then(async (nextSession) => persistSession(nextSession))
+        .then(async (nextSession) => {
+          const currentSession = sessionRef.current;
+
+          if (!currentSession) {
+            return null;
+          }
+
+          if (
+            (baseUserId && currentSession.user.id !== baseUserId) ||
+            currentSession.refreshToken !== refreshToken
+          ) {
+            return currentSession;
+          }
+
+          const sessionToPersist =
+            userStateVersionRef.current === startedUserStateVersion
+              ? nextSession
+              : {
+                  ...nextSession,
+                  user: currentSession.user,
+                };
+
+          return persistSession(sessionToPersist);
+        })
         .catch(async (error) => {
           if (
             options?.clearOnFailure &&
-            shouldClearSessionAfterRefreshFailure(error)
+            shouldClearSessionAfterRefreshFailure(error) &&
+            sessionRef.current?.refreshToken === refreshToken
           ) {
             await clearSessionState();
           }
@@ -175,8 +210,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const stored = await readStoredSession();
         if (isMounted) {
           if (!stored) {
-            setSession(null);
-            setOnboardingRoute(null);
+            applySessionState(null);
             return;
           }
 
@@ -187,15 +221,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
             });
 
             if (activeSession) {
-              setSession(activeSession);
-              setOnboardingRoute(getOnboardingRouteForUser(activeSession.user));
+              applySessionState(activeSession);
             }
 
             return;
           }
 
-          setSession(stored);
-          setOnboardingRoute(getOnboardingRouteForUser(stored.user));
+          applySessionState(stored);
           void refreshSession(stored.refreshToken, {
             clearOnFailure: false,
             silent: true,
@@ -205,10 +237,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
       } catch {
         await clearSessionState();
-        if (isMounted) {
-          setSession(null);
-          setOnboardingRoute(null);
-        }
       } finally {
         if (isMounted) {
           setIsHydrating(false);
@@ -221,7 +249,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       isMounted = false;
     };
-  }, [clearSessionState, refreshSession]);
+  }, [applySessionState, clearSessionState, refreshSession]);
 
   useEffect(() => {
     if (!session) {
@@ -343,7 +371,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } finally {
       setIsSigningIn(false);
     }
-  }, []);
+  }, [persistSession]);
 
   const completeOnboarding = useCallback(async () => {
     setOnboardingRoute(null);
@@ -351,21 +379,30 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const updateProfile = useCallback(
     async (input: UpdateMyProfileInput) => {
-      if (!session) {
+      const requestSession = sessionRef.current;
+
+      if (!requestSession) {
         throw new Error("No active session");
       }
 
       setErrorMessage(null);
 
       try {
-        const patchRaw = await updateMyProfile(session.accessToken, input);
+        const patchRaw = await updateMyProfile(requestSession.accessToken, input);
         const patch = pickDefinedRecord(patchRaw);
+        const currentSession = sessionRef.current;
+
+        if (!currentSession || currentSession.user.id !== requestSession.user.id) {
+          throw new Error("Session changed while updating profile");
+        }
+
+        userStateVersionRef.current += 1;
         const user = normalizeAuthenticatedUser({
-          ...session.user,
+          ...currentSession.user,
           ...patch,
         } as AuthenticatedUser);
         const nextSession: AuthSession = {
-          ...session,
+          ...currentSession,
           user,
         };
 
@@ -379,16 +416,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
         throw error;
       }
     },
-    [session],
+    [persistSession],
   );
 
   const signOut = useCallback(async () => {
-    const refreshToken = session?.refreshToken;
+    const refreshToken = sessionRef.current?.refreshToken;
 
-    setSession(null);
     setErrorMessage(null);
-    setOnboardingRoute(null);
-    await clearStoredSession();
+    await clearSessionState();
 
     try {
       await GoogleSignin?.signOut();
@@ -403,7 +438,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // noop: local logout is enough for the prototype.
       }
     }
-  }, [session?.refreshToken]);
+  }, [clearSessionState]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
