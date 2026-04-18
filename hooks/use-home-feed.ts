@@ -89,6 +89,10 @@ export const FEED_MODE_LABELS: Record<
     title: "Tu red",
     hint: "Visitas y señales de quienes te importan",
   },
+  city: {
+    title: "Tu ciudad",
+    hint: "Reseñas públicas en tu ciudad",
+  },
   nearby: {
     title: "Cerca tuyo",
     hint: "Lugares en tu radio con contexto",

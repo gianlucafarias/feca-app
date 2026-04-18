@@ -94,6 +94,7 @@ export default function NewVisitScreen() {
   const lat = session?.user.lat;
   const lng = session?.user.lng;
   const city = session?.user.city ?? "";
+  const cityGooglePlaceId = session?.user.cityGooglePlaceId;
   const accessToken = session?.accessToken;
 
   useEffect(() => {
@@ -217,8 +218,11 @@ export default function NewVisitScreen() {
       return;
     }
 
-    if (selectedPlace?.isManual && !city.trim()) {
-      Alert.alert("Ciudad", "Completa tu ciudad antes de crear un lugar manual.");
+    if (selectedPlace?.isManual && !cityGooglePlaceId?.trim()) {
+      Alert.alert(
+        "Ciudad",
+        "Configurá tu ciudad en el perfil antes de crear un lugar manual.",
+      );
       return;
     }
 
@@ -235,6 +239,7 @@ export default function NewVisitScreen() {
         ? await createManualPlaceApi(accessToken, {
             address: manualAddress.trim(),
             city: city.trim(),
+            cityGooglePlaceId: cityGooglePlaceId!,
             lat,
             lng,
             name: finalName,

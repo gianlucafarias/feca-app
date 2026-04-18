@@ -1,3 +1,4 @@
+import { hasCanonicalCity } from "@/lib/profile/canonical-city";
 import type { AuthenticatedUser } from "@/types/auth";
 
 export type OnboardingRoute = "/(onboarding)/username" | "/(onboarding)/city";
@@ -12,10 +13,7 @@ export function getOnboardingRouteForUser(
     return "/(onboarding)/username";
   }
 
-  const hasLocation =
-    Boolean(user.city?.trim()) && user.lat != null && user.lng != null;
-
-  if (!hasLocation) {
+  if (!hasCanonicalCity(user)) {
     return "/(onboarding)/city";
   }
 

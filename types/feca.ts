@@ -57,8 +57,8 @@ export type SavedPlace = {
   reason: string;
 };
 
-/** Modo del feed en inicio: red social, proximidad o momento/intención. */
-export type FeedMode = "network" | "nearby" | "now";
+/** Modo del feed en inicio: red, ciudad canónica, proximidad o momento/intención. */
+export type FeedMode = "network" | "city" | "nearby" | "now";
 
 export type FeedItem = {
   id: string;
@@ -114,6 +114,9 @@ export type OnboardingDraft = {
   displayName: string;
   city: string;
   neighborhood: string;
+  cityGooglePlaceId?: string;
+  /** Nombre largo de la ciudad (FECA); no confundir con `displayName` del usuario. */
+  cityDisplayName?: string;
   lat?: number;
   lng?: number;
 };

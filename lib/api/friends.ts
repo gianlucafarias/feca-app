@@ -17,24 +17,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function parseUserId(raw: unknown): string {
+  if (typeof raw === "string" && raw.length > 0) {
+    return raw;
+  }
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return String(raw);
+  }
+  return "";
+}
+
 function extractApiUserPublic(raw: unknown): ApiUserPublic | null {
   if (!isRecord(raw)) return null;
 
   const candidate = isRecord(raw.user) ? raw.user : raw;
-  const id = typeof candidate.id === "string" ? candidate.id : "";
+  const id = parseUserId(candidate.id);
   const username =
-    typeof candidate.username === "string" ? candidate.username : "";
+    typeof candidate.username === "string" ? candidate.username.trim() : "";
   const displayName =
-    typeof candidate.displayName === "string" ? candidate.displayName : "";
+    typeof candidate.displayName === "string" ? candidate.displayName.trim() : "";
 
-  if (!id || !username || !displayName) {
+  if (!id) {
     return null;
   }
 
+  const safeUsername = username.length > 0 ? username : id;
+  const safeDisplay =
+    displayName.length > 0 ? displayName : safeUsername;
+
   return {
     id,
-    username,
-    displayName,
+    username: safeUsername,
+    displayName: safeDisplay,
     avatarUrl:
       typeof candidate.avatarUrl === "string" ? candidate.avatarUrl : null,
     city: typeof candidate.city === "string" ? candidate.city : null,

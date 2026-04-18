@@ -1,6 +1,8 @@
 export type AuthenticatedUser = {
   avatarUrl?: string;
   city?: string;
+  /** Place ID de Google de la localidad; fuente de verdad junto con city + lat/lng. */
+  cityGooglePlaceId?: string;
   displayName: string;
   email: string;
   id: string;
@@ -24,6 +26,7 @@ export type AuthLoginResult = {
 
 export type UpdateMyProfileInput = {
   city?: string;
+  cityGooglePlaceId?: string;
   displayName?: string;
   lat?: number;
   lng?: number;

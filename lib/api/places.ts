@@ -137,6 +137,7 @@ export async function createManualPlaceApi(
     name: string;
     address: string;
     city: string;
+    cityGooglePlaceId: string;
     lat?: number;
     lng?: number;
   },

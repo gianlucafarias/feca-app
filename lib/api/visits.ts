@@ -14,6 +14,7 @@ type ListVisitsResponse = {
 type FeedResponse = {
   items?: ApiFeedItem[];
   total?: number;
+  nextCursor?: string | null;
 };
 
 type CreateVisitResponse = {
@@ -72,12 +73,16 @@ export async function fetchFeed(
   options?: {
     limit?: number;
     offset?: number;
-    mode?: "network" | "nearby" | "now";
+    mode?: "network" | "city" | "nearby" | "now";
     cursor?: string;
     lat?: number;
     lng?: number;
   },
-): Promise<{ items: ApiFeedItem[]; total: number }> {
+): Promise<{
+  items: ApiFeedItem[];
+  total: number;
+  nextCursor?: string | null;
+}> {
   const params = new URLSearchParams();
   if (options?.limit != null) params.set("limit", String(options.limit));
   if (options?.offset != null) params.set("offset", String(options.offset));
@@ -101,6 +106,7 @@ export async function fetchFeed(
   return {
     items: data.items ?? [],
     total: data.total ?? (data.items?.length ?? 0),
+    nextCursor: data.nextCursor ?? null,
   };
 }
 

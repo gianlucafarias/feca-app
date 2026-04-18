@@ -115,8 +115,9 @@ export function NearbyPlacesSlider({
         </View>
       ) : places.length === 0 ? (
         <Text style={styles.emptyHint}>
-          No hay lugares para mostrar. Probá actualizar o revisá tu ubicación en el
-          perfil.
+          No hay lugares cerca para mostrar. Si acabás de cambiar de ciudad, probá
+          tirar para actualizar; si sigue vacío, puede que aún no haya datos en esa
+          zona en FECA.
         </Text>
       ) : (
         <ScrollView

@@ -7,6 +7,13 @@ type DiariesListResponse = {
   total: number;
 };
 
+export type SearchPublicDiariesResult = {
+  diaries: ApiDiary[];
+  total: number;
+  /** True si no existía `GET /v1/diaries/search` y se filtraron guías públicas propias. */
+  usedFallback: boolean;
+};
+
 type DiaryResponse = {
   diary: ApiDiary;
 };
@@ -54,6 +61,69 @@ export async function fetchMyDiaries(
   }
 
   return (await response.json()) as DiariesListResponse;
+}
+
+/**
+ * Búsqueda de guías públicas. Usa `GET /v1/diaries/search` si está disponible;
+ * si la ruta no existe (404/405/501), filtra en cliente las guías públicas de `fetchMyDiaries`.
+ */
+export async function searchPublicDiaries(
+  accessToken: string,
+  params: { q: string; limit?: number },
+): Promise<SearchPublicDiariesResult> {
+  const q = params.q.trim();
+  const limit = params.limit ?? 25;
+
+  if (!q) {
+    return { diaries: [], total: 0, usedFallback: false };
+  }
+
+  const search = new URLSearchParams();
+  search.set("q", q);
+  search.set("limit", String(limit));
+
+  const response = await fetch(
+    `${getApiBaseUrl()}/v1/diaries/search?${search.toString()}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+
+  if (response.ok) {
+    const data = (await response.json()) as DiariesListResponse;
+    const diaries = data.diaries ?? [];
+    return {
+      diaries,
+      total: data.total ?? diaries.length,
+      usedFallback: false,
+    };
+  }
+
+  if (response.status === 404 || response.status === 405 || response.status === 501) {
+    return filterMyPublicDiariesByQuery(accessToken, q);
+  }
+
+  throw new Error(await parseError(response));
+}
+
+async function filterMyPublicDiariesByQuery(
+  accessToken: string,
+  q: string,
+): Promise<SearchPublicDiariesResult> {
+  const res = await fetchMyDiaries(accessToken);
+  const qLower = q.toLowerCase();
+  const filtered = res.diaries.filter((d) => {
+    if (d.visibility !== "public") {
+      return false;
+    }
+    const hay = `${d.name} ${d.description ?? ""} ${d.intro ?? ""}`.toLowerCase();
+    return hay.includes(qLower);
+  });
+  return {
+    diaries: filtered,
+    total: filtered.length,
+    usedFallback: true,
+  };
 }
 
 export async function fetchUserDiaries(

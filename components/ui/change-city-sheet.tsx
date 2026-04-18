@@ -20,6 +20,7 @@ import { FormField } from "@/components/ui/form-field";
 import { GradientButton } from "@/components/ui/gradient-button";
 import { TextLinkButton } from "@/components/ui/text-link-button";
 import { useCityLocationPicker } from "@/hooks/use-city-location-picker";
+import { hasCanonicalCity } from "@/lib/profile/canonical-city";
 import {
   loadRecentCities,
   rememberCity,
@@ -56,12 +57,13 @@ export function ChangeCitySheet({
   const {
     applyResolvedCity,
     cityInput,
+    draft: cityDraft,
     fillFromCurrentLocation,
     isLocating,
     isResolvingCity,
     onChangeCityText,
     onPickCitySuggestion,
-    placesEnabled,
+    cityApiEnabled,
     resolveCoordinates,
     resolvedCityLabel,
     setFieldBlur,
@@ -69,9 +71,12 @@ export function ChangeCitySheet({
     setSubmitError,
     submitError,
     suggestions,
+    suggestionsError,
     suggestionsLoading,
   } = useCityLocationPicker({
+    accessToken: session?.accessToken,
     initialCity,
+    initialCityGooglePlaceId: session?.user.cityGooglePlaceId,
     initialLat,
     initialLng,
     resetKey: visible ? resetKey : null,
@@ -93,16 +98,19 @@ export function ChangeCitySheet({
     setSubmitError(null);
 
     void resolveCoordinates()
-      .then(({ city, lat, lng }) =>
+      .then(({ city, cityGooglePlaceId, displayName, lat, lng }) =>
         updateProfile({
           city,
+          cityGooglePlaceId,
           lat,
           lng,
-        }).then(() => ({ city, lat, lng })),
+        }).then(() => ({ city, cityGooglePlaceId, displayName, lat, lng })),
       )
-      .then(({ city, lat, lng }) =>
+      .then(({ city, cityGooglePlaceId, displayName, lat, lng }) =>
         rememberCity({
-          label: city,
+          label: displayName,
+          city,
+          cityGooglePlaceId,
           lat,
           lng,
         }),
@@ -129,7 +137,14 @@ export function ChangeCitySheet({
     updateProfile,
   ]);
 
-  const isReady = cityInput.trim().length > 0;
+  const isReady =
+    Boolean(session?.accessToken) &&
+    hasCanonicalCity({
+      city: cityDraft.city,
+      cityGooglePlaceId: cityDraft.cityGooglePlaceId,
+      lat: cityDraft.lat,
+      lng: cityDraft.lng,
+    });
   const keyboardOpen = keyboardInset > 0;
 
   /**
@@ -220,13 +235,13 @@ export function ChangeCitySheet({
                 value={cityInput}
               />
 
-              {placesEnabled ? (
+              {cityApiEnabled ? (
                 <Text style={styles.hint}>
-                  Escribí para ver sugerencias (Google Places).
+                  Escribí para ver sugerencias (FECA).
                 </Text>
               ) : (
                 <Text style={styles.hintMuted}>
-                  Configurá EXPO_PUBLIC_GOOGLE_PLACES_API_KEY para sugerencias.
+                  Iniciá sesión para buscar ciudades o usá tu ubicación actual.
                 </Text>
               )}
 
@@ -235,6 +250,10 @@ export function ChangeCitySheet({
                   color={fecaTheme.colors.primary}
                   style={styles.spinner}
                 />
+              ) : null}
+
+              {suggestionsError ? (
+                <Text style={styles.suggestionsError}>{suggestionsError}</Text>
               ) : null}
 
               {suggestions.length > 0 ? (
@@ -249,7 +268,7 @@ export function ChangeCitySheet({
                     {suggestions.map((item) => (
                       <Pressable
                         accessibilityRole="button"
-                        key={item.placeId}
+                        key={item.cityGooglePlaceId}
                         onPress={() => {
                           void onPickCitySuggestion(item);
                         }}
@@ -258,7 +277,9 @@ export function ChangeCitySheet({
                           pressed && styles.suggestionRowPressed,
                         ]}
                       >
-                        <Text style={styles.suggestionText}>{item.label}</Text>
+                        <Text style={styles.suggestionText}>
+                          {item.displayName}
+                        </Text>
                       </Pressable>
                     ))}
                   </ScrollView>
@@ -272,7 +293,7 @@ export function ChangeCitySheet({
                     {recents.map((r) => (
                       <Pressable
                         accessibilityRole="button"
-                        key={`${r.label}-${r.lat}-${r.lng}`}
+                        key={r.cityGooglePlaceId}
                         onPress={() => applyResolvedCity(r)}
                         style={({ pressed }) => [
                           styles.recentChip,
@@ -399,6 +420,11 @@ const styles = StyleSheet.create({
   },
   spinner: {
     marginTop: fecaTheme.spacing.sm,
+  },
+  suggestionsError: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.secondary,
+    marginTop: fecaTheme.spacing.xs,
   },
   suggestionsBox: {
     backgroundColor: fecaTheme.surfaces.container,

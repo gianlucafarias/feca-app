@@ -76,6 +76,7 @@ export type CreateVisitPayload = {
 
 export type ApiMeUser = ApiUserPublic & {
   email?: string;
+  cityGooglePlaceId?: string | null;
   lat?: number;
   lng?: number;
   bio?: string | null;
@@ -91,14 +92,31 @@ export type ApiUserPublicProfile = ApiMeUser & {
   followersCount?: number;
 };
 
-export type ApiNotificationType = "follow";
+/** Tipos emitidos por backend (extensible si agregan más). */
+export type ApiNotificationType =
+  | "follow"
+  | "group_invite"
+  | "group_joined"
+  | "group_event_proposed"
+  | "group_event_rsvp"
+  | "visit_created"
+  | "diary_published";
 
+/**
+ * GET /v1/me/notifications — capa canónica: title, body, deepLink, entity, data.
+ * `actor` puede faltar en tipos futuros; el texto mostrable prioriza body/title del servidor.
+ */
 export type ApiNotification = {
   id: string;
-  type: ApiNotificationType;
+  type: ApiNotificationType | string;
   read: boolean;
   createdAt: string;
-  actor: ApiUserPublic;
+  actor?: ApiUserPublic;
+  title?: string | null;
+  body?: string | null;
+  deepLink?: string | null;
+  entity?: Record<string, unknown> | null;
+  data?: Record<string, unknown> | null;
 };
 
 export type ApiSavedPlaceRow = {

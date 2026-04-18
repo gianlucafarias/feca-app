@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -26,17 +27,24 @@ const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 export function OnboardingProvider({ children }: PropsWithChildren) {
   const [draft, setDraft] = useState<OnboardingDraft>(defaultDraft);
 
+  const resetDraft = useCallback(() => {
+    setDraft(defaultDraft);
+  }, []);
+
+  const updateDraft = useCallback((input: Partial<OnboardingDraft>) => {
+    setDraft((current) => ({
+      ...current,
+      ...input,
+    }));
+  }, []);
+
   const value = useMemo<OnboardingContextValue>(
     () => ({
       draft,
-      resetDraft: () => setDraft(defaultDraft),
-      updateDraft: (input) =>
-        setDraft((current) => ({
-          ...current,
-          ...input,
-        })),
+      resetDraft,
+      updateDraft,
     }),
-    [draft],
+    [draft, resetDraft, updateDraft],
   );
 
   return (

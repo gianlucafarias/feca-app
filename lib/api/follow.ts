@@ -1,7 +1,8 @@
 import { getApiBaseUrl, parseError } from "./base";
 
+/** Contrato nuevo: solo `{ "following": boolean }`. Se tolera `social.following` legacy. */
 type FollowResponse = {
-  following: boolean;
+  following?: boolean;
   social?: {
     following?: boolean;
   };
@@ -26,8 +27,13 @@ export async function followUser(
     throw new Error(await parseError(response));
   }
 
-  const data = (await response.json()) as FollowResponse;
-  return Boolean(data.following ?? data.social?.following);
+  const raw = await response.json().catch(() => ({}));
+  const data = raw as FollowResponse;
+  const explicit = data.following ?? data.social?.following;
+  if (typeof explicit === "boolean") {
+    return explicit;
+  }
+  return true;
 }
 
 export async function unfollowUser(
@@ -46,6 +52,11 @@ export async function unfollowUser(
     throw new Error(await parseError(response));
   }
 
-  const data = (await response.json()) as FollowResponse;
-  return Boolean(data.following ?? data.social?.following);
+  const raw = await response.json().catch(() => ({}));
+  const data = raw as FollowResponse;
+  const explicit = data.following ?? data.social?.following;
+  if (typeof explicit === "boolean") {
+    return explicit;
+  }
+  return false;
 }

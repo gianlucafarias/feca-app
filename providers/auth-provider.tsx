@@ -12,6 +12,8 @@ import { AppState, Platform, type AppStateStatus } from "react-native";
 import {
   loginWithGoogleIdToken,
   logoutWithRefreshToken,
+  normalizeAuthenticatedUser,
+  pickDefinedRecord,
   refreshAuthSession,
   updateMyProfile,
 } from "@/lib/auth/api";
@@ -27,6 +29,7 @@ import {
 import type {
   AuthLoginResult,
   AuthSession,
+  AuthenticatedUser,
   UpdateMyProfileInput,
 } from "@/types/auth";
 
@@ -355,7 +358,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setErrorMessage(null);
 
       try {
-        const user = await updateMyProfile(session.accessToken, input);
+        const patchRaw = await updateMyProfile(session.accessToken, input);
+        const patch = pickDefinedRecord(patchRaw);
+        const user = normalizeAuthenticatedUser({
+          ...session.user,
+          ...patch,
+        } as AuthenticatedUser);
         const nextSession: AuthSession = {
           ...session,
           user,

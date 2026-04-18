@@ -20,6 +20,8 @@ import { SavedNewListCard } from "@/components/cards/saved-new-list-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormField } from "@/components/ui/form-field";
 import { PageBackground } from "@/components/ui/page-background";
+import { paddingBottomStackScreen } from "@/components/ui/screen-padding";
+import { StackScreenHeader } from "@/components/ui/stack-screen-header";
 import { useSavedLists } from "@/hooks/use-saved-lists";
 import { fetchMySavedPlaces } from "@/lib/api/saved";
 import { mapApiSavedRowToSavedPlace } from "@/lib/feca/map-api-social";
@@ -234,14 +236,12 @@ export default function SavedScreen() {
     return <Redirect href="/(onboarding)/welcome" />;
   }
 
+  const scrollBottom = paddingBottomStackScreen(insets.bottom);
+
   const header = (
     <View style={styles.headerWrap}>
-      <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 12) }]}>
-        <Pressable accessibilityRole="button" hitSlop={8} onPress={goBack} style={styles.backBtn}>
-          <Ionicons color={fecaTheme.colors.onSurface} name="chevron-back" size={22} />
-        </Pressable>
-        <Text style={styles.navTitle}>Guardados</Text>
-        <View style={styles.backPlaceholder} />
+      <View style={styles.headerTopBleed}>
+        <StackScreenHeader title="Guardados" onPressBack={goBack} />
       </View>
       <Pressable
         accessibilityRole="button"
@@ -305,7 +305,7 @@ export default function SavedScreen() {
     return (
       <PageBackground>
         <FlatList
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: scrollBottom }]}
           contentInsetAdjustmentBehavior="automatic"
           data={displayedOverviewRows}
           keyExtractor={(item) => (item.kind === "create" ? "__create__" : item.id)}
@@ -359,7 +359,7 @@ export default function SavedScreen() {
     return (
       <PageBackground>
         <FlatList
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: scrollBottom }]}
           contentInsetAdjustmentBehavior="automatic"
           data={filteredMergedPlaces}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -402,7 +402,7 @@ export default function SavedScreen() {
     return (
       <PageBackground>
         <FlatList
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: scrollBottom }]}
           contentInsetAdjustmentBehavior="automatic"
           data={filteredReviews}
           ItemSeparatorComponent={() => <View style={styles.separatorSm} />}
@@ -454,34 +454,15 @@ export default function SavedScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: 48,
     paddingHorizontal: fecaTheme.spacing.lg,
-    paddingTop: fecaTheme.spacing.sm,
-  },
-  topBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: fecaTheme.spacing.sm,
-    paddingHorizontal: fecaTheme.spacing.xs,
-  },
-  backBtn: {
-    alignItems: "center",
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  backPlaceholder: {
-    width: 40,
-  },
-  navTitle: {
-    ...fecaTheme.typography.title,
-    color: fecaTheme.colors.onSurface,
-    fontSize: 18,
+    paddingTop: 0,
   },
   headerWrap: {
     gap: fecaTheme.spacing.md,
     marginBottom: fecaTheme.spacing.lg,
+  },
+  headerTopBleed: {
+    marginHorizontal: -fecaTheme.spacing.lg,
   },
   plansShortcut: {
     alignItems: "center",

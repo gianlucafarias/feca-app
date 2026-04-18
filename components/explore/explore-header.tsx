@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingBottom: fecaTheme.spacing.md,
-    paddingHorizontal: fecaTheme.spacing.sm,
+    paddingHorizontal: fecaTheme.spacing.md,
   },
   side: {
     flex: 1,

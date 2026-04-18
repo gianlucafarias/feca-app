@@ -11,6 +11,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DiaryCard } from "@/components/cards/diary-card";
 import { VisitCard } from "@/components/cards/visit-card";
@@ -18,6 +19,7 @@ import { AvatarBadge } from "@/components/ui/avatar-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RatingDistributionBars } from "@/components/profile/rating-distribution-bars";
 import { PageBackground } from "@/components/ui/page-background";
+import { paddingBottomWithFloatingTabBar } from "@/components/ui/screen-padding";
 import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { fetchMyDiaries } from "@/lib/api/diaries";
 import { fetchMyFriends } from "@/lib/api/friends";
@@ -44,6 +46,7 @@ function openPlaceFromSummary(place: Place) {
 }
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const { session, signOut } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -212,7 +215,10 @@ export default function ProfileScreen() {
   return (
     <PageBackground>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: paddingBottomWithFloatingTabBar(insets.bottom) },
+        ]}
         contentInsetAdjustmentBehavior="never"
         refreshControl={
           <RefreshControl
@@ -444,7 +450,6 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: 160,
     paddingHorizontal: fecaTheme.spacing.lg,
     paddingTop: 0,
   },

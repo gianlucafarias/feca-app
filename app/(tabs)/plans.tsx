@@ -11,10 +11,12 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PlanHeroCard } from "@/components/cards/plan-hero-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBackground } from "@/components/ui/page-background";
+import { paddingBottomWithFloatingTabBar } from "@/components/ui/screen-padding";
 import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { fetchMyGroups } from "@/lib/api/groups";
 import { mapApiGroupToFecaGroup } from "@/lib/feca/map-api-social";
@@ -23,6 +25,7 @@ import { fecaTheme } from "@/theme/feca";
 import type { FecaGroup } from "@/types/feca";
 
 export default function PlansScreen() {
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const accessToken = session?.accessToken;
   const [groups, setGroups] = useState<FecaGroup[]>([]);
@@ -88,7 +91,10 @@ export default function PlansScreen() {
         </View>
       ) : (
         <FlatList
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: paddingBottomWithFloatingTabBar(insets.bottom) },
+          ]}
           data={groups}
           ItemSeparatorComponent={() => <View style={styles.gap} />}
           keyExtractor={(item) => item.id}
@@ -149,7 +155,6 @@ const styles = StyleSheet.create({
     ...fecaTheme.elevation.ambient,
   },
   list: {
-    paddingBottom: 120,
     paddingHorizontal: fecaTheme.spacing.lg,
   },
   gap: {

@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { ActivityFeedRow } from "@/components/home/activity-feed-row";
@@ -17,6 +18,7 @@ import { ChangeCitySheet } from "@/components/ui/change-city-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBackground } from "@/components/ui/page-background";
 import { ReviewDetailSheet } from "@/components/ui/review-detail-sheet";
+import { paddingBottomWithFloatingTabBar } from "@/components/ui/screen-padding";
 import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { useHomeFeed } from "@/hooks/use-home-feed";
 import { useNearbyPlaces } from "@/hooks/use-nearby-places";
@@ -25,6 +27,7 @@ import { fecaTheme } from "@/theme/feca";
 import type { FeedItem, Visit } from "@/types/feca";
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const {
     listData,
@@ -36,7 +39,7 @@ export default function HomeScreen() {
     accessToken: session?.accessToken,
     lat: session?.user.lat,
     lng: session?.user.lng,
-    mode: "network",
+    mode: "city",
   });
 
   const {
@@ -69,7 +72,10 @@ export default function HomeScreen() {
   return (
     <PageBackground>
       <FlatList
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: paddingBottomWithFloatingTabBar(insets.bottom) },
+        ]}
         contentInsetAdjustmentBehavior="never"
         data={listData}
         removeClippedSubviews={false}
@@ -91,7 +97,7 @@ export default function HomeScreen() {
               description={
                 showTrustFallbackInvite
                   ? "Cuando haya visitas de tu red, las vas a ver acá."
-                  : "No hay sugerencias para mostrar todavía."
+                  : "Cuando haya reseñas públicas en tu ciudad, las vas a ver acá."
               }
               icon="sparkles-outline"
               title="Nada por acá"
@@ -169,7 +175,9 @@ export default function HomeScreen() {
                     </Text>
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => router.push("/friends")}
+                      onPress={() =>
+                        router.push({ pathname: "/search", params: { mode: "people" } })
+                      }
                       style={styles.inviteCta}
                     >
                       <Text style={styles.inviteCtaLabel}>Descubrir gente</Text>
@@ -217,6 +225,7 @@ export default function HomeScreen() {
         visit={reviewVisit}
       />
       <ChangeCitySheet
+        key={`city-sheet-${cityPickerNonce}`}
         initialCity={session?.user.city ?? ""}
         initialLat={session?.user.lat}
         initialLng={session?.user.lng}
@@ -230,7 +239,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: 140,
     paddingHorizontal: fecaTheme.spacing.lg,
     paddingTop: 0,
   },

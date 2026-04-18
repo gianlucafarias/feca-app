@@ -101,6 +101,13 @@ export default function RootLayout() {
                   options={{ animation: "slide_from_right" }}
                 />
                 <Stack.Screen
+                  name="search"
+                  options={{
+                    animation: "slide_from_bottom",
+                    presentation: "fullScreenModal",
+                  }}
+                />
+                <Stack.Screen
                   name="notifications"
                   options={{ animation: "slide_from_right" }}
                 />

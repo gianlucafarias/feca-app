@@ -443,6 +443,112 @@ Definir shape mínimo de `events` alineado con la UI (fecha, lugar, estado): ver
 
 ---
 
+## Búsqueda unificada (pantalla `search` en la app)
+
+La app abre [`app/search.tsx`](../app/search.tsx) con tres modos: **Lugares**, **Guías**, **Personas**. Solo dispara requests cuando el usuario escribió **al menos 2 caracteres** (`q` recortado).
+
+### 1. Personas — `GET /v1/users/search`
+
+**Cliente:** [`searchUsersByUsername`](../lib/api/users.ts)
+
+```http
+GET /v1/users/search?q=<texto>&limit=25&offset=0
+Authorization: Bearer <token>
+```
+
+**Query:**
+
+| Parámetro | Obligatorio | Notas |
+|-----------|-------------|--------|
+| `q` | Sí | Texto de búsqueda (el front envía `trim()`). |
+| `limit` | No | Default razonable 20–25; el cliente usa 25. |
+| `offset` | No | Paginación si el backend la soporta. |
+
+**200 esperado:**
+
+```json
+{
+  "users": [
+    {
+      "id": "usr_...",
+      "username": "muni",
+      "displayName": "Muni",
+      "avatarUrl": "https://..." ,
+      "city": "Buenos Aires"
+    }
+  ],
+  "total": 42
+}
+```
+
+- El cliente acepta ítems envueltos como `{ "user": { ... } }` y normaliza.
+- **Recomendado backend:** buscar por `username` y opcionalmente `displayName`; normalizar `@` y case; excluir al usuario autenticado si aplica; `total` estable para paginación; rate limit por usuario.
+
+---
+
+### 2. Lugares — `GET /v1/places/nearby` (con texto)
+
+**Cliente:** [`fetchNearbyPlaces`](../lib/api/places.ts) en modo búsqueda solo envía `query`, `lat`, `lng`, `limit` (sin `type` en la pantalla de búsqueda actual).
+
+```http
+GET /v1/places/nearby?query=<texto>&lat=-34.6&lng=-58.4&limit=20
+Authorization: Bearer <token>
+```
+
+- Si faltan `lat`/`lng`, el backend puede usar la ciudad/coords guardadas en el perfil del usuario (comportamiento ya asumido en el cliente).
+- **200:** `{ "places": [ ... ] }` — forma `NearbyPlace` en [`types/places.ts`](../types/places.ts).
+- Calidad de ranking y sinónimos (barrio, “wifi”, etc.) son responsabilidad del backend / proxy a Google.
+
+---
+
+### 3. Guías públicas — `GET /v1/diaries/search` (nuevo / crítico para descubrimiento)
+
+**Cliente:** [`searchPublicDiaries`](../lib/api/diaries.ts)
+
+Hoy el cliente intenta esta ruta; si responde **404**, **405** o **501**, hace **fallback** solo con `GET /v1/me/diaries` filtrando guías **`visibility: "public"`** del usuario logueado (no hay descubrimiento comunitario).
+
+Para que el modo **Guías** sea útil en producción, el backend debe implementar:
+
+```http
+GET /v1/diaries/search?q=<texto>&limit=25&offset=0
+Authorization: Bearer <token>
+```
+
+**Comportamiento esperado:**
+
+- Solo incluir diarios/guías con **`visibility: "public"`** (y reglas de moderación si existen).
+- Buscar al menos en `name`, `description`, `intro` (campos del modelo `ApiDiary` en [`types/api.ts`](../types/api.ts)).
+- Opcional: ponderar por autor, ciudad, recencia.
+
+**200 — misma forma que listados de diarios:**
+
+```json
+{
+  "diaries": [
+    {
+      "id": "dry_...",
+      "name": "...",
+      "description": "...",
+      "intro": "...",
+      "places": [],
+      "createdBy": { "id": "...", "username": "...", "displayName": "...", "avatarUrl": null, "city": "..." },
+      "createdAt": "2026-04-07T12:00:00.000Z",
+      "visibility": "public",
+      "coverImageUrl": null,
+      "orderedPlaces": null
+    }
+  ],
+  "total": 10
+}
+```
+
+- Debe ser compatible con el tipo **`ApiDiary`** que ya usa el detalle `GET /v1/diaries/:id`.
+- Si `q` está vacío, el cliente **no llama**; el backend puede devolver `400` o `[]` si se llama igual.
+
+**Errores:** cuerpo `{ "message": "..." }` coherente con el resto de la API.
+
+---
+
 ## Checklist para el equipo backend
 
 - [ ] Errores con cuerpo `{ "message": "..." }`
@@ -451,6 +557,7 @@ Definir shape mínimo de `events` alineado con la UI (fecha, lugar, estado): ver
 - [ ] Lugares: siempre `id` interno FECA + `googlePlaceId` cuando venga de Google
 - [ ] Tags de visita: strings `cafe` / `brunch` (extensible después)
 - [ ] GET `/v1/me` alineado con el user devuelto por PATCH `/v1/me` + stats
+- [ ] `GET /v1/diaries/search` para búsqueda global de guías públicas (pantalla Buscar)
 
 ---
 
@@ -471,5 +578,6 @@ La app ya llama a estos endpoints cuando hay sesión y `EXPO_PUBLIC_API_BASE_URL
 | Perfil / stats | `lib/api/me.ts` (`GET /v1/me`) |
 | Usuario ajeno | `lib/api/users.ts` (`GET /v1/users/:id`) |
 | Guardado en lugar | `lib/api/saved.ts` |
+| Búsqueda (lugares / guías / personas) | `lib/api/places.ts`, `lib/api/diaries.ts` (`searchPublicDiaries`), `lib/api/users.ts` (`searchUsersByUsername`) — ver sección **Búsqueda unificada** arriba |
 
-Si el backend aún no expone alguna ruta, la UI muestra error o datos mock de respaldo donde aplica (perfil: visitas mock si falla `GET /v1/me/visits`; usuario: mock si falla `GET /v1/users/:id`).
+Si el backend aún no expone alguna ruta, la UI muestra error o datos mock de respaldo donde aplica (perfil: visitas mock si falla `GET /v1/me/visits`; usuario: mock si falla `GET /v1/users/:id`). Si falta `GET /v1/diaries/search`, el modo Guías en Buscar solo filtra las guías públicas del propio usuario.

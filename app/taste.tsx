@@ -1,17 +1,17 @@
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Chip } from "@/components/ui/chip";
 import { PageBackground } from "@/components/ui/page-background";
+import { paddingBottomStackScreen } from "@/components/ui/screen-padding";
+import { StackScreenHeader } from "@/components/ui/stack-screen-header";
 import { fetchMyTaste, fetchTasteOptions, updateMyTaste } from "@/lib/api/taste";
 import { FALLBACK_TASTE_OPTIONS } from "@/lib/taste-options";
 import { loadTasteProfile, saveTasteProfile } from "@/lib/taste-profile-storage";
@@ -21,6 +21,7 @@ import type { ApiTasteOption } from "@/types/api";
 import type { TasteProfileState } from "@/types/feca";
 
 export default function TasteProfileScreen() {
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const [state, setState] = useState<TasteProfileState>({ selectedIds: [] });
   const [options, setOptions] = useState<ApiTasteOption[]>([]);
@@ -108,25 +109,18 @@ export default function TasteProfileScreen() {
   return (
     <PageBackground>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: paddingBottomStackScreen(insets.bottom, fecaTheme.spacing.xxxl) },
+        ]}
+        contentInsetAdjustmentBehavior="never"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topBar}>
-          <Pressable
-            accessibilityLabel="Cerrar"
-            onPress={() => router.back()}
-            style={styles.backBtn}
-          >
-            <Ionicons
-              color={fecaTheme.colors.onSurface}
-              name="chevron-back"
-              size={22}
-            />
-          </Pressable>
+        <View style={styles.headerBleed}>
+          <StackScreenHeader title="Tu gusto" />
         </View>
 
-        <Text style={styles.title}>Tu gusto</Text>
         <Text style={styles.subtitle}>
           Construí tu perfil de preferencias: así seguir a alguien tiene sentido
           porque ves si sus elecciones resuenan con las tuyas.
@@ -160,32 +154,18 @@ const styles = StyleSheet.create({
     padding: fecaTheme.spacing.xxl,
   },
   content: {
-    paddingBottom: fecaTheme.spacing.xxxl,
-    paddingHorizontal: fecaTheme.spacing.xl,
-    paddingTop: fecaTheme.spacing.xl,
+    paddingHorizontal: fecaTheme.spacing.lg,
+    paddingTop: 0,
   },
-  topBar: {
-    flexDirection: "row",
-    marginBottom: fecaTheme.spacing.md,
-  },
-  backBtn: {
-    alignItems: "center",
-    backgroundColor: fecaTheme.surfaces.high,
-    borderRadius: fecaTheme.radii.pill,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  title: {
-    ...fecaTheme.typography.headline,
-    color: fecaTheme.colors.onSurface,
-    marginBottom: fecaTheme.spacing.sm,
+  headerBleed: {
+    marginHorizontal: -fecaTheme.spacing.lg,
   },
   subtitle: {
     ...fecaTheme.typography.body,
     color: fecaTheme.colors.muted,
     lineHeight: 22,
     marginBottom: fecaTheme.spacing.xl,
+    marginTop: fecaTheme.spacing.sm,
   },
   chips: {
     flexDirection: "row",

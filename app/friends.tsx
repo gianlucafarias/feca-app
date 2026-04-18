@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Redirect, router } from "expo-router";
 import {
   useCallback,
@@ -10,17 +9,19 @@ import {
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { UserFollowRow } from "@/components/cards/user-follow-row";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormField } from "@/components/ui/form-field";
 import { PageBackground } from "@/components/ui/page-background";
+import { paddingBottomStackScreen } from "@/components/ui/screen-padding";
+import { StackScreenHeader } from "@/components/ui/stack-screen-header";
 import { followUser, unfollowUser } from "@/lib/api/follow";
 import { fetchMyFollowing } from "@/lib/api/friends";
 import { mapApiUserPublicToUser } from "@/lib/feca/map-api-user";
@@ -31,6 +32,7 @@ import type { ApiUserPublic } from "@/types/api";
 import type { User } from "@/types/feca";
 
 export default function FollowingScreen() {
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const accessToken = session?.accessToken;
 
@@ -109,9 +111,18 @@ export default function FollowingScreen() {
       setBusyUserId(apiUser.id);
       try {
         if (currentlyFollowing) {
-          await unfollowUser(apiUser.id, accessToken);
+          const ok = await unfollowUser(apiUser.id, accessToken);
+          if (ok) {
+            setFollowing((prev) => prev.filter((u) => u.id !== apiUser.id));
+          }
         } else {
-          await followUser(apiUser.id, accessToken);
+          const ok = await followUser(apiUser.id, accessToken);
+          if (ok) {
+            setFollowing((prev) => {
+              if (prev.some((u) => u.id === apiUser.id)) return prev;
+              return [...prev, mapApiUserPublicToUser(apiUser)];
+            });
+          }
         }
         await loadFollowing();
       } finally {
@@ -127,14 +138,6 @@ export default function FollowingScreen() {
 
   const listHeader = (
     <View style={styles.headerWrap}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons color={fecaTheme.colors.onSurface} name="chevron-back" size={20} />
-        </Pressable>
-        <Text style={styles.screenTitle}>Seguidos</Text>
-        <Text style={styles.count}>{following.length}</Text>
-      </View>
-
       <Text style={styles.helper}>
         Buscá por nombre de usuario y seguí perfiles para ver su actividad en tu feed.
       </Text>
@@ -183,9 +186,18 @@ export default function FollowingScreen() {
 
   return (
     <PageBackground>
-      <FlatList
-        contentContainerStyle={styles.content}
-        contentInsetAdjustmentBehavior="automatic"
+      <View style={styles.flex}>
+        <StackScreenHeader
+          right={<Text style={styles.count}>{following.length}</Text>}
+          title="Seguidos"
+          titleAlignment="leading"
+        />
+        <FlatList
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: paddingBottomStackScreen(insets.bottom) },
+        ]}
+        contentInsetAdjustmentBehavior="never"
         data={following}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         keyExtractor={(item) => item.id}
@@ -228,38 +240,27 @@ export default function FollowingScreen() {
           );
         }}
         showsVerticalScrollIndicator={false}
+        style={styles.listFlex}
       />
+      </View>
     </PageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  listFlex: {
+    flex: 1,
+  },
   content: {
-    paddingBottom: 100,
     paddingHorizontal: fecaTheme.spacing.lg,
-    paddingTop: fecaTheme.spacing.xxl,
+    paddingTop: 0,
   },
   headerWrap: {
     gap: fecaTheme.spacing.md,
     marginBottom: fecaTheme.spacing.lg,
-  },
-  headerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: fecaTheme.spacing.sm,
-  },
-  backButton: {
-    alignItems: "center",
-    backgroundColor: fecaTheme.surfaces.high,
-    borderRadius: fecaTheme.radii.pill,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  screenTitle: {
-    ...fecaTheme.typography.headline,
-    color: fecaTheme.colors.onSurface,
-    flex: 1,
   },
   count: {
     ...fecaTheme.typography.meta,

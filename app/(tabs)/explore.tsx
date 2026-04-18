@@ -9,23 +9,22 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
+  Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NearbyPlaceCard } from "@/components/cards/nearby-place-card";
-import { ExploreHeader } from "@/components/explore/explore-header";
 import { ExploreQuickChip } from "@/components/explore/explore-quick-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBackground } from "@/components/ui/page-background";
+import { paddingBottomWithFloatingTabBar } from "@/components/ui/screen-padding";
+import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { fetchExploreContext, fetchNearbyPlaces } from "@/lib/api/places";
 import type { ExploreContextId } from "@/lib/explore-contexts";
 import { useAuth } from "@/providers/auth-provider";
 import { fecaTheme } from "@/theme/feca";
 import type { NearbyPlace } from "@/types/places";
-
-const DEBOUNCE_MS = 400;
 
 type QuickMode = "near" | "wifi" | "specialty";
 
@@ -34,13 +33,9 @@ export default function ExploreScreen() {
   const { session } = useAuth();
 
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
-  const [query, setQuery] = useState("");
   const [quickMode, setQuickMode] = useState<QuickMode>("near");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchInputRef = useRef<TextInput>(null);
 
   const lat = session?.user.lat;
   const lng = session?.user.lng;
@@ -108,8 +103,7 @@ export default function ExploreScreen() {
     [accessToken, lat, lng, quickMode],
   );
 
-  const queryRef = useRef(query);
-  queryRef.current = query;
+  const queryRef = useRef("");
   const searchRef = useRef(search);
   searchRef.current = search;
 
@@ -117,26 +111,16 @@ export default function ExploreScreen() {
     void searchRef.current(queryRef.current);
   }, [accessToken, lat, lng]);
 
-  const handleQueryChange = useCallback(
-    (text: string) => {
-      setQuery(text);
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-      debounceRef.current = setTimeout(() => {
-        void search(text);
-      }, DEBOUNCE_MS);
+  const selectQuickMode = useCallback(
+    (mode: QuickMode) => {
+      queryRef.current = "";
+      setQuickMode(mode);
+      void search("", mode);
     },
     [search],
   );
 
-  const selectQuickMode = useCallback((mode: QuickMode) => {
-    setQuery("");
-    setQuickMode(mode);
-    void search("", mode);
-  }, [search]);
-
-  const filtersActive = !query.trim();
+  const filtersActive = !queryRef.current.trim();
 
   const hasLocation = lat != null && lng != null;
 
@@ -156,7 +140,7 @@ export default function ExploreScreen() {
         <FlatList
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: 140 + insets.bottom },
+            { paddingBottom: paddingBottomWithFloatingTabBar(insets.bottom) },
           ]}
           contentInsetAdjustmentBehavior="never"
           data={places}
@@ -189,60 +173,62 @@ export default function ExploreScreen() {
             )
           }
           ListHeaderComponent={
-            <View>
-              <ExploreHeader
-                onPressMenu={() => router.push("/(tabs)/profile")}
-                onPressSearch={() => searchInputRef.current?.focus()}
+            <View style={styles.listHeader}>
+              <TabScreenHeader
+                showNotifications={Boolean(session?.accessToken)}
+                onPressNotifications={() => router.push("/notifications")}
               />
 
-              <View style={styles.searchShell}>
-                <Ionicons
-                  color={fecaTheme.colors.muted}
-                  name="search-outline"
-                  size={20}
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  ref={searchInputRef}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  onChangeText={handleQueryChange}
-                  placeholder="Buscar granos, barrios o baristas…"
-                  placeholderTextColor={fecaTheme.colors.muted}
-                  selectionColor={fecaTheme.colors.primary}
-                  style={styles.searchInput}
-                  value={query}
-                  {...(Platform.OS === "android"
-                    ? { includeFontPadding: false }
-                    : {})}
-                />
-              </View>
+              <View style={styles.listHeaderBody}>
+                <Pressable
+                  accessibilityLabel="Buscar lugares, guías o personas"
+                  accessibilityRole="button"
+                  onPress={() => router.push("/search")}
+                  style={styles.searchShell}
+                >
+                  <Ionicons
+                    color={fecaTheme.colors.muted}
+                    name="search-outline"
+                    size={20}
+                    style={styles.searchIcon}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    style={styles.searchPlaceholder}
+                    {...(Platform.OS === "android"
+                      ? { includeFontPadding: false }
+                      : {})}
+                  >
+                    Buscar lugares, guías o personas…
+                  </Text>
+                </Pressable>
 
-              <ScrollView
-                horizontal
-                contentContainerStyle={styles.chipRow}
-                showsHorizontalScrollIndicator={false}
-              >
-                <ExploreQuickChip
-                  emphasis="strong"
-                  icon="navigate"
-                  label="Cerca de mí"
-                  selected={filtersActive && quickMode === "near"}
-                  onPress={() => selectQuickMode("near")}
-                />
-                <ExploreQuickChip
-                  icon="wifi"
-                  label="Wifi gratis"
-                  selected={filtersActive && quickMode === "wifi"}
-                  onPress={() => selectQuickMode("wifi")}
-                />
-                <ExploreQuickChip
-                  icon="cafe-outline"
-                  label="Café de especialidad"
-                  selected={filtersActive && quickMode === "specialty"}
-                  onPress={() => selectQuickMode("specialty")}
-                />
-              </ScrollView>
+                <ScrollView
+                  horizontal
+                  contentContainerStyle={styles.chipRow}
+                  showsHorizontalScrollIndicator={false}
+                >
+                  <ExploreQuickChip
+                    emphasis="strong"
+                    icon="navigate"
+                    label="Cerca de mí"
+                    selected={filtersActive && quickMode === "near"}
+                    onPress={() => selectQuickMode("near")}
+                  />
+                  <ExploreQuickChip
+                    icon="wifi"
+                    label="Wifi gratis"
+                    selected={filtersActive && quickMode === "wifi"}
+                    onPress={() => selectQuickMode("wifi")}
+                  />
+                  <ExploreQuickChip
+                    icon="cafe-outline"
+                    label="Café de especialidad"
+                    selected={filtersActive && quickMode === "specialty"}
+                    onPress={() => selectQuickMode("specialty")}
+                  />
+                </ScrollView>
+              </View>
             </View>
           }
           removeClippedSubviews={false}
@@ -270,6 +256,13 @@ const styles = StyleSheet.create({
   screenWrap: {
     flex: 1,
   },
+  listHeader: {
+    marginBottom: fecaTheme.spacing.md,
+    marginHorizontal: -fecaTheme.spacing.lg,
+  },
+  listHeaderBody: {
+    paddingHorizontal: fecaTheme.spacing.lg,
+  },
   content: {
     paddingHorizontal: fecaTheme.spacing.lg,
     paddingTop: 0,
@@ -286,9 +279,9 @@ const styles = StyleSheet.create({
   searchIcon: {
     marginRight: fecaTheme.spacing.sm,
   },
-  searchInput: {
+  searchPlaceholder: {
     ...fecaTheme.typography.body,
-    color: fecaTheme.colors.onSurface,
+    color: fecaTheme.colors.muted,
     flex: 1,
     minHeight: 48,
     paddingVertical: fecaTheme.spacing.sm,

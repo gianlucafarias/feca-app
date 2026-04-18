@@ -4,14 +4,49 @@ const STORAGE_KEY = "@feca/recent-cities";
 const MAX_ITEMS = 8;
 
 export type RecentCityEntry = {
+  /** Texto mostrado en chips (típicamente `displayName` de FECA). */
   label: string;
+  city: string;
+  cityGooglePlaceId: string;
   lat: number;
   lng: number;
-  placeId?: string;
 };
 
 function normalizeLabel(label: string) {
   return label.trim().toLowerCase();
+}
+
+function parseEntry(row: unknown): RecentCityEntry | null {
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  const o = row as Record<string, unknown>;
+  const label = typeof o.label === "string" ? o.label : "";
+  const city = typeof o.city === "string" ? o.city : "";
+  const cityGooglePlaceIdRaw =
+    typeof o.cityGooglePlaceId === "string"
+      ? o.cityGooglePlaceId
+      : typeof o.placeId === "string"
+        ? o.placeId
+        : "";
+  const lat = typeof o.lat === "number" ? o.lat : Number.NaN;
+  const lng = typeof o.lng === "number" ? o.lng : Number.NaN;
+  if (
+    !label ||
+    !city ||
+    !cityGooglePlaceIdRaw ||
+    Number.isNaN(lat) ||
+    Number.isNaN(lng)
+  ) {
+    return null;
+  }
+  return {
+    label: label.trim(),
+    city: city.trim(),
+    cityGooglePlaceId: cityGooglePlaceIdRaw,
+    lat,
+    lng,
+  };
 }
 
 export async function loadRecentCities(): Promise<RecentCityEntry[]> {
@@ -26,24 +61,8 @@ export async function loadRecentCities(): Promise<RecentCityEntry[]> {
     }
     const out: RecentCityEntry[] = [];
     for (const row of parsed) {
-      if (
-        row &&
-        typeof row === "object" &&
-        "label" in row &&
-        "lat" in row &&
-        "lng" in row
-      ) {
-        const o = row as Record<string, unknown>;
-        const label = typeof o.label === "string" ? o.label : "";
-        const lat = typeof o.lat === "number" ? o.lat : Number.NaN;
-        const lng = typeof o.lng === "number" ? o.lng : Number.NaN;
-        if (!label || Number.isNaN(lat) || Number.isNaN(lng)) {
-          continue;
-        }
-        const entry: RecentCityEntry = { label, lat, lng };
-        if (typeof o.placeId === "string") {
-          entry.placeId = o.placeId;
-        }
+      const entry = parseEntry(row);
+      if (entry) {
         out.push(entry);
       }
     }
@@ -55,11 +74,19 @@ export async function loadRecentCities(): Promise<RecentCityEntry[]> {
 
 export async function rememberCity(entry: RecentCityEntry): Promise<void> {
   const prev = await loadRecentCities();
-  const key = normalizeLabel(entry.label);
-  const withoutDup = prev.filter((p) => normalizeLabel(p.label) !== key);
-  const next = [{ ...entry, label: entry.label.trim() }, ...withoutDup].slice(
-    0,
-    MAX_ITEMS,
+  const key = normalizeLabel(entry.cityGooglePlaceId);
+  const withoutDup = prev.filter(
+    (p) => normalizeLabel(p.cityGooglePlaceId) !== key,
   );
+  const next = [
+    {
+      label: entry.label.trim(),
+      city: entry.city.trim(),
+      cityGooglePlaceId: entry.cityGooglePlaceId,
+      lat: entry.lat,
+      lng: entry.lng,
+    },
+    ...withoutDup,
+  ].slice(0, MAX_ITEMS);
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }

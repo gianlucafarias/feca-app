@@ -45,3 +45,19 @@ export async function markNotificationRead(
     throw new Error(await parseError(response));
   }
 }
+
+export async function markAllNotificationsRead(
+  accessToken: string,
+): Promise<void> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/v1/me/notifications/read-all`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+}

@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,7 +16,11 @@ import { FormField } from "@/components/ui/form-field";
 import { GradientButton } from "@/components/ui/gradient-button";
 import { PageBackground } from "@/components/ui/page-background";
 import { TextLinkButton } from "@/components/ui/text-link-button";
-import { useCityLocationPicker } from "@/hooks/use-city-location-picker";
+import {
+  useCityLocationPicker,
+  type CityLocationDraft,
+} from "@/hooks/use-city-location-picker";
+import { hasCanonicalCity } from "@/lib/profile/canonical-city";
 import { rememberCity } from "@/lib/storage/recent-cities";
 import { useAuth } from "@/providers/auth-provider";
 import { useOnboarding } from "@/providers/onboarding-provider";
@@ -33,14 +37,28 @@ export default function CityScreen() {
   const { draft, resetDraft, updateDraft } = useOnboarding();
   const [isSaving, setIsSaving] = useState(false);
 
+  const onCityDraftChange = useCallback(
+    (next: CityLocationDraft) => {
+      updateDraft({
+        city: next.city,
+        cityGooglePlaceId: next.cityGooglePlaceId,
+        cityDisplayName: next.displayName,
+        lat: next.lat,
+        lng: next.lng,
+      });
+    },
+    [updateDraft],
+  );
+
   const {
     cityInput,
+    draft: cityDraft,
     fillFromCurrentLocation,
     isLocating,
     isResolvingCity,
     onChangeCityText,
     onPickCitySuggestion,
-    placesEnabled,
+    cityApiEnabled,
     resolveCoordinates,
     resolvedCityLabel,
     setFieldBlur,
@@ -48,21 +66,24 @@ export default function CityScreen() {
     setSubmitError,
     submitError,
     suggestions,
+    suggestionsError,
     suggestionsLoading,
   } = useCityLocationPicker({
+    accessToken: session?.accessToken,
     initialCity: draft.city.trim() || session?.user.city || "",
+    initialCityGooglePlaceId:
+      draft.cityGooglePlaceId ?? session?.user.cityGooglePlaceId,
     initialLat: draft.lat ?? session?.user.lat,
     initialLng: draft.lng ?? session?.user.lng,
-    onDraftChange: (next) => {
-      updateDraft({
-        city: next.city,
-        lat: next.lat,
-        lng: next.lng,
-      });
-    },
+    onDraftChange: onCityDraftChange,
   });
 
-  const isReady = cityInput.trim().length > 0;
+  const isReady = hasCanonicalCity({
+    city: cityDraft.city,
+    cityGooglePlaceId: cityDraft.cityGooglePlaceId,
+    lat: cityDraft.lat,
+    lng: cityDraft.lng,
+  });
   const fallbackUsername =
     draft.username.trim() || session?.user.username || undefined;
   const fallbackDisplayName =
@@ -116,14 +137,13 @@ export default function CityScreen() {
                 placeholder="Montevideo, Buenos Aires, Córdoba..."
                 value={cityInput}
               />
-              {placesEnabled ? (
+              {cityApiEnabled ? (
                 <Text style={styles.placesHint}>
-                  Escribí para ver sugerencias de ciudades (Google Places).
+                  Escribí para ver sugerencias de ciudades (FECA).
                 </Text>
               ) : (
                 <Text style={styles.placesHintMuted}>
-                  Sin API de Places: configurá EXPO_PUBLIC_GOOGLE_PLACES_API_KEY
-                  para sugerencias; podés usar tu ubicación o escribir la ciudad.
+                  Iniciá sesión para buscar ciudades o usá tu ubicación actual.
                 </Text>
               )}
               {suggestionsLoading ? (
@@ -132,12 +152,15 @@ export default function CityScreen() {
                   style={styles.suggestionsSpinner}
                 />
               ) : null}
+              {suggestionsError ? (
+                <Text style={styles.suggestionsError}>{suggestionsError}</Text>
+              ) : null}
               {suggestions.length > 0 ? (
                 <View style={styles.suggestionsBox}>
                   {suggestions.map((item) => (
                     <Pressable
                       accessibilityRole="button"
-                      key={item.placeId}
+                      key={item.cityGooglePlaceId}
                       onPress={() => {
                         void onPickCitySuggestion(item);
                       }}
@@ -146,7 +169,7 @@ export default function CityScreen() {
                         pressed && styles.suggestionRowPressed,
                       ]}
                     >
-                      <Text style={styles.suggestionText}>{item.label}</Text>
+                      <Text style={styles.suggestionText}>{item.displayName}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -181,17 +204,30 @@ export default function CityScreen() {
                   setSubmitError(null);
 
                   void resolveCoordinates()
-                    .then(({ city, lat, lng }) =>
+                    .then(({ city, cityGooglePlaceId, displayName, lat, lng }) =>
                       updateProfile({
                         city,
+                        cityGooglePlaceId,
                         displayName: fallbackDisplayName,
                         lat,
                         lng,
                         username: fallbackUsername,
-                      }).then(() => ({ city, lat, lng })),
+                      }).then(() => ({
+                        city,
+                        cityGooglePlaceId,
+                        displayName,
+                        lat,
+                        lng,
+                      })),
                     )
-                    .then(({ city, lat, lng }) =>
-                      rememberCity({ label: city, lat, lng }),
+                    .then(({ city, cityGooglePlaceId, displayName, lat, lng }) =>
+                      rememberCity({
+                        label: displayName,
+                        city,
+                        cityGooglePlaceId,
+                        lat,
+                        lng,
+                      }),
                     )
                     .then(async () => {
                       resetDraft();
@@ -261,6 +297,11 @@ const styles = StyleSheet.create({
   placesHintMuted: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.secondarySoft,
+  },
+  suggestionsError: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.secondary,
+    marginTop: fecaTheme.spacing.xs,
   },
   suggestionsSpinner: {
     marginTop: fecaTheme.spacing.xs,
