@@ -16,6 +16,7 @@ import { Chip } from "@/components/ui/chip";
 import { FormField } from "@/components/ui/form-field";
 import { TextLinkButton } from "@/components/ui/text-link-button";
 import { fecaTheme, outlineGhost } from "@/theme/feca";
+import type { ReactNode } from "react";
 import type { RichVisitDraft, WouldReturn } from "@/types/feca";
 
 const NOTE_MAX = 500;
@@ -26,6 +27,8 @@ const PUBLISH_BTN = "#4d535e";
 const RATING_LABELS = ["", "REGULAR", "ACEPTABLE", "BIEN", "GENIAL", "EXCEPCIONAL"];
 
 type WriteReviewEditorialProps = {
+  /** Bloque opcional debajo de la nota y encima de la galería (p. ej. fecha de visita). */
+  belowNoteSlot?: ReactNode;
   placeName: string;
   placeAddress: string;
   placePhotoUrl?: string;
@@ -70,6 +73,7 @@ async function pickPhoto(
 
 export function WriteReviewEditorial(props: WriteReviewEditorialProps) {
   const {
+    belowNoteSlot,
     placeName,
     placeAddress,
     placePhotoUrl,
@@ -226,6 +230,10 @@ export function WriteReviewEditorial(props: WriteReviewEditorialProps) {
           {note.length} / {NOTE_MAX}
         </Text>
       </View>
+
+      {belowNoteSlot ? (
+        <View style={styles.belowNoteSlot}>{belowNoteSlot}</View>
+      ) : null}
 
       <View style={styles.galleryHeader}>
         <Text style={styles.galleryTitle}>GALERÍA</Text>
@@ -409,6 +417,10 @@ const styles = StyleSheet.create({
     paddingBottom: fecaTheme.spacing.xxl,
     paddingHorizontal: fecaTheme.spacing.lg,
     paddingTop: 0,
+  },
+  belowNoteSlot: {
+    marginBottom: fecaTheme.spacing.lg,
+    marginTop: -fecaTheme.spacing.sm,
   },
   placeCard: {
     marginBottom: fecaTheme.spacing.lg,

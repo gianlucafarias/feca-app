@@ -23,6 +23,7 @@ import { TabScreenHeader } from "@/components/ui/tab-screen-header";
 import { fetchExploreContext, fetchNearbyPlaces } from "@/lib/api/places";
 import type { ExploreContextId } from "@/lib/explore-contexts";
 import { useAuth } from "@/providers/auth-provider";
+import { useUnreadNotifications } from "@/providers/unread-notifications-provider";
 import { fecaTheme } from "@/theme/feca";
 import type { NearbyPlace } from "@/types/places";
 
@@ -31,6 +32,7 @@ type QuickMode = "near" | "wifi" | "specialty";
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { unreadCount } = useUnreadNotifications();
 
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [quickMode, setQuickMode] = useState<QuickMode>("near");
@@ -39,6 +41,7 @@ export default function ExploreScreen() {
 
   const lat = session?.user.lat;
   const lng = session?.user.lng;
+  const cityGooglePlaceId = session?.user.cityGooglePlaceId;
   const accessToken = session?.accessToken;
 
   const search = useCallback(
@@ -109,7 +112,7 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     void searchRef.current(queryRef.current);
-  }, [accessToken, lat, lng]);
+  }, [accessToken, cityGooglePlaceId, lat, lng]);
 
   const selectQuickMode = useCallback(
     (mode: QuickMode) => {
@@ -122,7 +125,9 @@ export default function ExploreScreen() {
 
   const filtersActive = !queryRef.current.trim();
 
-  const hasLocation = lat != null && lng != null;
+  const hasLocation =
+    (lat != null && lng != null) ||
+    Boolean(session?.user.cityGooglePlaceId?.trim());
 
   const openMapsNearby = useCallback(() => {
     if (lat != null && lng != null) {
@@ -177,6 +182,7 @@ export default function ExploreScreen() {
               <TabScreenHeader
                 showNotifications={Boolean(session?.accessToken)}
                 onPressNotifications={() => router.push("/notifications")}
+                unreadCount={unreadCount}
               />
 
               <View style={styles.listHeaderBody}>
@@ -213,18 +219,21 @@ export default function ExploreScreen() {
                     icon="navigate"
                     label="Cerca de mí"
                     selected={filtersActive && quickMode === "near"}
+                    tone="butter"
                     onPress={() => selectQuickMode("near")}
                   />
                   <ExploreQuickChip
                     icon="wifi"
                     label="Wifi gratis"
                     selected={filtersActive && quickMode === "wifi"}
+                    tone="lavender"
                     onPress={() => selectQuickMode("wifi")}
                   />
                   <ExploreQuickChip
                     icon="cafe-outline"
                     label="Café de especialidad"
                     selected={filtersActive && quickMode === "specialty"}
+                    tone="peach"
                     onPress={() => selectQuickMode("specialty")}
                   />
                 </ScrollView>

@@ -23,9 +23,15 @@ import { useKeyboardBottomInset } from "@/hooks/use-keyboard-bottom-inset";
 import { fetchMyFriends } from "@/lib/api/friends";
 import { createGroup, joinGroupByCode } from "@/lib/api/groups";
 import { mapApiUserPublicToUser } from "@/lib/feca/map-api-user";
+import { filterUsersBySearchQuery } from "@/lib/feca/user-search-query";
 import { useAuth } from "@/providers/auth-provider";
 import { fecaTheme } from "@/theme/feca";
-import type { User } from "@/types/feca";
+import type {
+  GroupVisibility,
+  MemberProposalInteraction,
+  PlaceProposalPolicy,
+  User,
+} from "@/types/feca";
 
 type Step = "name" | "join" | "members" | "success";
 
@@ -33,24 +39,6 @@ export default function NewGroupScreen() {
   const { session } = useAuth();
   const accessToken = session?.accessToken;
   const [friends, setFriends] = useState<User[]>([]);
-
-  const loadFriends = useCallback(async () => {
-    if (!accessToken) {
-      setFriends([]);
-      return;
-    }
-    try {
-      const res = await fetchMyFriends(accessToken, { limit: 100 });
-      setFriends(res.friends.map(mapApiUserPublicToUser));
-    } catch {
-      setFriends([]);
-    }
-  }, [accessToken]);
-
-  useEffect(() => {
-    void loadFriends();
-  }, [loadFriends]);
-
   const [step, setStep] = useState<Step>("name");
   const [groupName, setGroupName] = useState("");
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
@@ -58,7 +46,51 @@ export default function NewGroupScreen() {
   const [joinCode, setJoinCode] = useState("");
   const [joinBusy, setJoinBusy] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
+  const [planVisibility, setPlanVisibility] =
+    useState<GroupVisibility>("private");
+  const [planProposalPolicy, setPlanProposalPolicy] =
+    useState<PlaceProposalPolicy>("all_members");
+  const [planMemberInteraction, setPlanMemberInteraction] =
+    useState<MemberProposalInteraction>("collaborative");
   const keyboardInset = useKeyboardBottomInset();
+
+  const loadFriends = useCallback(
+    async (serverQuery?: string) => {
+      if (!accessToken) {
+        setFriends([]);
+        return;
+      }
+      try {
+        const res = await fetchMyFriends(accessToken, {
+          limit: 50,
+          ...(serverQuery && serverQuery.length >= 2
+            ? { q: serverQuery }
+            : {}),
+        });
+        setFriends(res.friends.map(mapApiUserPublicToUser));
+      } catch {
+        setFriends([]);
+      }
+    },
+    [accessToken],
+  );
+
+  useEffect(() => {
+    if (!accessToken || step !== "members") {
+      return;
+    }
+    const raw = friendSearch.trim();
+    if (raw.length >= 2) {
+      const t = setTimeout(() => {
+        void loadFriends(raw);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => {
+      void loadFriends(undefined);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [accessToken, step, friendSearch, loadFriends]);
 
   useEffect(() => {
     if (UIManager.setLayoutAnimationEnabledExperimental) {
@@ -73,11 +105,11 @@ export default function NewGroupScreen() {
   }, [step]);
 
   const filteredFriends = useMemo(() => {
-    const q = friendSearch.trim().toLowerCase();
-    if (!q) return friends;
-    return friends.filter((f) =>
-      `${f.displayName} ${f.username}`.toLowerCase().includes(q),
-    );
+    const raw = friendSearch.trim();
+    if (raw.length >= 2) {
+      return friends;
+    }
+    return filterUsersBySearchQuery(friends, raw);
   }, [friends, friendSearch]);
 
   const goToStep = (next: Step) => {
@@ -105,6 +137,9 @@ export default function NewGroupScreen() {
         await createGroup(accessToken, {
           name: groupName,
           memberIds: selectedMemberIds,
+          visibility: planVisibility,
+          placeProposalPolicy: planProposalPolicy,
+          memberProposalInteraction: planMemberInteraction,
         });
         goToStep("success");
       } catch {
@@ -177,6 +212,129 @@ export default function NewGroupScreen() {
               returnKeyType="next"
               value={groupName}
             />
+            <Text style={styles.planSettingsTitle}>Visibilidad</Text>
+            <Text style={styles.planSettingsHint}>
+              Público: tus seguidores pueden ver el plan. Privado: solo quienes
+              invités o quien tenga el código.
+            </Text>
+            <View style={styles.planChipRow}>
+              <Pressable
+                onPress={() => setPlanVisibility("private")}
+                style={[
+                  styles.planChip,
+                  planVisibility === "private" && styles.planChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planChipText,
+                    planVisibility === "private" && styles.planChipTextActive,
+                  ]}
+                >
+                  Privado
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setPlanVisibility("public_followers")}
+                style={[
+                  styles.planChip,
+                  planVisibility === "public_followers" && styles.planChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planChipText,
+                    planVisibility === "public_followers" &&
+                      styles.planChipTextActive,
+                  ]}
+                >
+                  Público (seguidores)
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.planSettingsTitle}>Quién puede proponer salidas</Text>
+            <View style={styles.planChipRow}>
+              <Pressable
+                onPress={() => setPlanProposalPolicy("all_members")}
+                style={[
+                  styles.planChip,
+                  planProposalPolicy === "all_members" && styles.planChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planChipText,
+                    planProposalPolicy === "all_members" &&
+                      styles.planChipTextActive,
+                  ]}
+                >
+                  Todos los miembros
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setPlanProposalPolicy("owner_only")}
+                style={[
+                  styles.planChip,
+                  planProposalPolicy === "owner_only" && styles.planChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planChipText,
+                    planProposalPolicy === "owner_only" &&
+                      styles.planChipTextActive,
+                  ]}
+                >
+                  Solo yo
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.planSettingsTitle}>Propuestas de otros miembros</Text>
+            <Text style={styles.planSettingsHint}>
+              Colaborativo: votación y confirmación. Anuncio: sin votar ni
+              confirmar planes propuestos por otros.
+            </Text>
+            <View style={styles.planChipRow}>
+              <Pressable
+                onPress={() => setPlanMemberInteraction("collaborative")}
+                style={[
+                  styles.planChip,
+                  planMemberInteraction === "collaborative" &&
+                    styles.planChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planChipText,
+                    planMemberInteraction === "collaborative" &&
+                      styles.planChipTextActive,
+                  ]}
+                >
+                  Colaborativo
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setPlanMemberInteraction("announcement_locked")}
+                style={[
+                  styles.planChip,
+                  planMemberInteraction === "announcement_locked" &&
+                    styles.planChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.planChipText,
+                    planMemberInteraction === "announcement_locked" &&
+                      styles.planChipTextActive,
+                  ]}
+                >
+                  Solo anuncio
+                </Text>
+              </Pressable>
+            </View>
+
             <View style={styles.spacer} />
             <Pressable onPress={() => goToStep("join")} style={styles.joinLink}>
               <Ionicons color={fecaTheme.colors.primary} name="enter-outline" size={16} />
@@ -351,6 +509,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginBottom: fecaTheme.spacing.lg,
+  },
+  planSettingsTitle: {
+    ...fecaTheme.typography.bodyStrong,
+    color: fecaTheme.colors.onSurface,
+    fontSize: 14,
+    marginBottom: fecaTheme.spacing.xs,
+    marginTop: fecaTheme.spacing.md,
+  },
+  planSettingsHint: {
+    ...fecaTheme.typography.body,
+    color: fecaTheme.colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: fecaTheme.spacing.sm,
+  },
+  planChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: fecaTheme.spacing.sm,
+    marginBottom: fecaTheme.spacing.xs,
+  },
+  planChip: {
+    backgroundColor: fecaTheme.surfaces.high,
+    borderRadius: fecaTheme.radii.pill,
+    paddingHorizontal: fecaTheme.spacing.md,
+    paddingVertical: fecaTheme.spacing.sm,
+  },
+  planChipActive: {
+    backgroundColor: fecaTheme.colors.primary,
+  },
+  planChipText: {
+    ...fecaTheme.typography.label,
+    color: fecaTheme.colors.onSurface,
+  },
+  planChipTextActive: {
+    color: fecaTheme.colors.onPrimary,
   },
   selectedCount: {
     ...fecaTheme.typography.meta,

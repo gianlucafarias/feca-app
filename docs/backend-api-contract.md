@@ -120,6 +120,7 @@ Reglas:
 - Si `googlePlaceId` está presente: resolver o reutilizar `place` en DB (Places/Google en servidor).
 - Si no hay `googlePlaceId`: crear visita con lugar manual usando `placeName` (obligatorio en ese caso).
 - `placeName` puede enviarse siempre como display; si hay `googlePlaceId`, el backend puede ignorar o validar consistencia.
+- **Onboarding / borradores:** el front puede enviar `note: ""` (string vacío) para visitas “rápidas” sin texto, siempre que `rating` y `placeId` sean válidos; la primera reseña con texto se envía en otra visita del mismo flujo.
 
 **201 Created:**
 
@@ -175,6 +176,52 @@ Orden: `visitedAt` descendente, luego `createdAt` descendente.
 
 ---
 
+## Onboarding extendido (primer registro)
+
+La app guía a usuarios nuevos (`isNewUser` en `POST /v1/auth/google/mobile`) por pasos extra: preferencias de salida, sugerencias para seguir, tres lugares recientes y una primera reseña escrita.
+
+### GET `/v1/onboarding/suggested-users`
+
+**Auth:** Bearer obligatorio.
+
+**Query (opcional):**
+
+| Parámetro | Descripción |
+|-----------|-------------|
+| `limit` | Default `6`, máximo recomendado `10`. |
+| `cityGooglePlaceId` | Si coincide con el perfil del usuario, el backend puede priorizar gente de la misma ciudad. |
+
+**200:**
+
+```json
+{
+  "users": [
+    {
+      "id": "usr_01H...",
+      "username": "muni",
+      "displayName": "Muni",
+      "avatarUrl": null,
+      "city": "Buenos Aires"
+    }
+  ],
+  "total": 6
+}
+```
+
+- Lista **aleatoria o semialeatoria** de cuentas distintas del solicitante; excluir bloqueados / ya seguidos si aplica.
+- Si no hay suficientes usuarios, `users` puede traer menos entradas; el front permite continuar sin seguir a nadie.
+
+### GET `/v1/me` — campos opcionales de onboarding
+
+Opcionalmente el backend puede incluir para control fino:
+
+- `onboardingVersion` (entero): si el perfil ya completó una versión del flujo, no forzar de nuevo.
+- `onboardingStep` o checklist equivalente (solo si se prefiere gating 100 % server-side).
+
+Si no existen, la app usa estado local en la sesión (`extendedOnboarding`) sólo para cuentas nuevas.
+
+---
+
 ## Fase 2 — Perfil, guardados, amigos
 
 ### GET `/v1/me`
@@ -203,6 +250,7 @@ Orden: `visitedAt` descendente, luego `createdAt` descendente.
 Notas:
 
 - `visitCount` / `savedCount` / `followingCount`: enteros >= 0.
+- Opcional: `groupInvitePolicy` (`"everyone"` \| `"from_following_only"`) — preferencia para aceptar invitaciones a planes; ver [backend-plans-settings.md](./backend-plans-settings.md).
 - Si `PATCH /v1/me` ya existe, alinear los mismos campos en `AuthenticatedUser` que devuelve PATCH con los de GET (o documentar diferencias).
 
 ### GET `/v1/users/:userId`
@@ -316,6 +364,8 @@ Idempotente: si ya estaba guardado, `200` con `saved: true`.
 }
 ```
 
+**Extensión (planes — settings):** el cliente puede enviar también `visibility`, `placeProposalPolicy` y `memberProposalInteraction`. Ver [backend-plans-settings.md](./backend-plans-settings.md).
+
 **201:**
 
 ```json
@@ -353,11 +403,21 @@ Idempotente: si ya estaba guardado, `200` con `saved: true`.
 
 Definir shape mínimo de `events` alineado con la UI (fecha, lugar, estado): ver implementación en `app/group/[id].tsx`.
 
+**Listado social (planes públicos de gente que sigo):** `GET /v1/me/friends/public-group-plans` — ver [backend-plans-settings.md](./backend-plans-settings.md).
+
 ### GET `/v1/groups/:groupId`
 
-**200:** un objeto `group` como arriba.
+**200 — miembro (o invitado con acceso de lectura según producto):** un objeto `group` completo como en `GET /v1/me/groups` (incluye `members`, `events`, `inviteCode` si corresponde).
 
-**404:** no existe.
+**200 — visitante no miembro, plan `visibility: public_followers`:** el mismo endpoint puede devolver un **resumen público** (sin `inviteCode`, `members` vacío u opcionalmente recortado, `events` con datos no sensibles). La app reconoce el modo con:
+
+- `viewerMembership`: `"none"` (no es miembro), `"active"` o `"invited"` cuando aplica.
+
+Opcional en ese modo: `memberCount` (entero) si `members` va vacío.
+
+**403 / 404:** plan privado y viewer no miembro, o id inexistente (recomendación: **404** uniforme para ids privados).
+
+Detalle en [backend-spec-friends-public-plans.md](./backend-spec-friends-public-plans.md) §3.
 
 ### POST `/v1/groups/:groupId/events`
 
@@ -374,6 +434,14 @@ Definir shape mínimo de `events` alineado con la UI (fecha, lugar, estado): ver
 (El backend elige si el evento referencia `placeId` interno o resuelve por `googlePlaceId`.)
 
 **201:** `{ "event": { ... } }`
+
+### PATCH `/v1/groups/:groupId`
+
+Actualización parcial del plan (nombre y/o políticas). Solo creador o admin. Ver [backend-plans-settings.md](./backend-plans-settings.md).
+
+### POST `/v1/groups/:groupId/leave`
+
+El usuario autenticado abandona el plan. Ver [backend-plans-settings.md](./backend-plans-settings.md).
 
 ### POST `/v1/diaries`
 

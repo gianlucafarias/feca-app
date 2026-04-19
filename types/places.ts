@@ -1,3 +1,37 @@
+/** Fila de `GET /v1/places/autocomplete` (Google + FECA). */
+export type ApiPlaceAutocompleteItem = {
+  id: string;
+  source: "google" | "manual";
+  sourcePlaceId?: string | null;
+  placeId?: string | null;
+  name: string;
+  address: string;
+  city: string;
+  lat?: number | null;
+  lng?: number | null;
+  categories: string[];
+  coverPhotoUrl?: string | null;
+  ratingExternal?: number | null;
+  ratingCountExternal?: number | null;
+  distanceMeters?: number | null;
+  alreadyInFeca: boolean;
+};
+
+export type ApiPlacesAutocompleteResponse = {
+  items: ApiPlaceAutocompleteItem[];
+  fallback: { allowManual: boolean; prefillName: string };
+  providerAvailable: boolean;
+};
+
+/** Señal social en carrusel editorial (amigos / red). */
+export type NearbyPlaceFriendRow = {
+  /** Handle sin @; se muestra como @usuario */
+  username: string;
+  avatarUrl?: string | null;
+  /** Texto al lado del usuario (ej. "volvería a ir"). */
+  snippet: string;
+};
+
 export type NearbyPlace = {
   googlePlaceId: string;
   name: string;
@@ -10,6 +44,15 @@ export type NearbyPlace = {
   primaryType?: string;
   photoUrl?: string;
   openNow?: boolean;
+  /** Chip de apertura (ej. "Abierto ahora", "Abre a las 9:00"). Viene del backend. */
+  openingChip?: string;
+  /** Frases cortas de tu red (ej. "María volvería a ir"). Viene del backend. */
+  socialChips?: string[];
+  /**
+   * Amigos con avatar y @usuario (preferido sobre parsear `socialChips`).
+   * Si falta, el cliente interpreta líneas `socialChips` que empiecen con `@usuario`.
+   */
+  friendSocialRows?: NearbyPlaceFriendRow[];
 };
 
 export type GoogleReview = {

@@ -71,7 +71,16 @@ export const fecaTheme = {
     lowest: "#ffffff",
     /** Chips — warm neutral step above container */
     highest: "#ece8e4",
-    glass: "rgba(252, 249, 246, 0.8)",
+    /** Tab bar / overlays: slightly more frost (pairs with FloatingTabBar blur) */
+    glass: "rgba(252, 249, 246, 0.86)",
+    /**
+     * Fondos pastel muy tenues (tarjetas feed, chips). Solo por categoría / copy;
+     * no sustituyen `high`/`container` como base por defecto.
+     */
+    pastelButter: "#faf4e8",
+    pastelLavender: "#f3effa",
+    pastelPeach: "#faf0ea",
+    pastelMist: "#eef5f3",
   },
   spacing: {
     xxs: 6,
@@ -94,6 +103,18 @@ export const fecaTheme = {
     xl: 48,
     xxl: 48,
     pill: 999,
+    /**
+     * Carruseles del home (lugares + guías): misma silueta “Near you”.
+     * Pill de copy sobre la foto.
+     */
+    carouselEditorial: 36,
+    carouselEditorialPill: 18,
+  },
+  /** Dimensiones compartidas carruseles editorial en inicio */
+  homeEditorialCarousel: {
+    cardWidth: 256,
+    imageHeight: 320,
+    sealSize: 58,
   },
   elevation: {
     /** DESIGN.md: 0 20 40 rgba(50,51,48,0.06) */
@@ -159,8 +180,37 @@ export const fecaTheme = {
       fontSize: 18,
       lineHeight: 20,
     },
+    /** Títulos de sección en carruseles del home (lugares, guías, …) */
+    homeCarouselSection: {
+      fontFamily: "PlusJakartaSans_600SemiBold",
+      fontSize: 24,
+      letterSpacing: -0.4,
+      lineHeight: 30,
+    },
   },
 } as const;
+
+/**
+ * Fondo de tarjeta de feed: tinte pastel suave según `reasonLine` / `summary`.
+ * Si no coincide ningún patrón, devuelve `surfaces.high` (comportamiento previo).
+ */
+export function feedCardSurfacePastel(reasonLine: string, summary: string): string {
+  const haystack = `${reasonLine} ${summary}`.toLowerCase();
+  const { surfaces } = fecaTheme;
+  if (/amig|segu|social|red|follow|confianza|persona|gente/i.test(haystack)) {
+    return surfaces.pastelLavender;
+  }
+  if (/abiert|ahora|open|wifi|cerca|proxim|ubic|km\b|mapa/i.test(haystack)) {
+    return surfaces.pastelButter;
+  }
+  if (/café|cafe|comid|restaurant|brunch|sabor|menú|menu|plato/i.test(haystack)) {
+    return surfaces.pastelPeach;
+  }
+  if (/guía|guia|editor|diario|reseñ|resen/i.test(haystack)) {
+    return surfaces.pastelMist;
+  }
+  return surfaces.high;
+}
 
 export const fecaNavigationTheme = {
   ...DefaultTheme,

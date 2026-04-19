@@ -93,6 +93,7 @@ export default function SearchScreen() {
 
   const lat = session?.user.lat;
   const lng = session?.user.lng;
+  const cityGooglePlaceId = session?.user.cityGooglePlaceId;
   const accessToken = session?.accessToken;
 
   useEffect(() => {
@@ -138,7 +139,7 @@ export default function SearchScreen() {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [searchMode, deferredQuery, accessToken, lat, lng]);
+  }, [searchMode, deferredQuery, accessToken, cityGooglePlaceId, lat, lng]);
 
   useEffect(() => {
     if (searchMode !== "guides" || !accessToken) {

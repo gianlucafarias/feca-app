@@ -19,9 +19,17 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { useExpoPushRegistration } from "@/hooks/use-expo-push-registration";
+import "@/lib/push/expo-notifications-setup";
 import { AuthProvider } from "@/providers/auth-provider";
 import { OnboardingProvider } from "@/providers/onboarding-provider";
+import { UnreadNotificationsProvider } from "@/providers/unread-notifications-provider";
 import { fecaNavigationTheme, fecaTheme } from "@/theme/feca";
+
+function ExpoPushRegistration() {
+  useExpoPushRegistration();
+  return null;
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // noop: splash screen can already be hidden in fast refresh.
@@ -62,14 +70,16 @@ export default function RootLayout() {
         <ThemeProvider value={fecaNavigationTheme}>
           <AuthProvider>
             <OnboardingProvider>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: {
-                    backgroundColor: fecaTheme.colors.background,
-                  },
-                }}
-              >
+              <UnreadNotificationsProvider>
+                <ExpoPushRegistration />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: {
+                      backgroundColor: fecaTheme.colors.background,
+                    },
+                  }}
+                >
                 <Stack.Screen name="index" />
                 <Stack.Screen name="(onboarding)" />
                 <Stack.Screen name="(tabs)" />
@@ -131,6 +141,14 @@ export default function RootLayout() {
                   options={{ animation: "slide_from_right" }}
                 />
                 <Stack.Screen
+                  name="outing-preferences"
+                  options={{ animation: "slide_from_right" }}
+                />
+                <Stack.Screen
+                  name="profile/edit"
+                  options={{ animation: "slide_from_right" }}
+                />
+                <Stack.Screen
                   name="collection/[id]"
                   options={{ animation: "slide_from_right" }}
                 />
@@ -138,8 +156,9 @@ export default function RootLayout() {
                   name="saved"
                   options={{ animation: "slide_from_right" }}
                 />
-              </Stack>
-              <StatusBar style="dark" />
+                </Stack>
+                <StatusBar style="dark" />
+              </UnreadNotificationsProvider>
             </OnboardingProvider>
           </AuthProvider>
         </ThemeProvider>

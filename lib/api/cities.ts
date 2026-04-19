@@ -91,16 +91,56 @@ function mapToCanonicalCity(row: unknown): ApiCanonicalCity | null {
     }
   }
 
-  if (!cityGooglePlaceId || !city || !displayName) {
+  if (!cityGooglePlaceId || !city) {
     return null;
   }
+  const label = displayName || city;
 
-  const out: ApiCanonicalCity = { city, displayName, cityGooglePlaceId };
+  const out: ApiCanonicalCity = { city, displayName: label, cityGooglePlaceId };
   if (lat != null && lng != null) {
     out.lat = lat;
     out.lng = lng;
   }
   return out;
+}
+
+/**
+ * Tras elegir una fila del autocomplete (sin lat/lng), el backend exige resolver coords canónicas.
+ * GET /v1/cities/resolve?cityGooglePlaceId=... — solo ese query param (camelCase).
+ */
+export async function fetchCityResolve(
+  accessToken: string,
+  cityGooglePlaceId: string,
+  options?: { signal?: AbortSignal },
+): Promise<ApiCanonicalCity> {
+  const id = cityGooglePlaceId.trim();
+  if (!id) {
+    throw new Error("Falta cityGooglePlaceId para resolver la ciudad.");
+  }
+
+  const params = new URLSearchParams();
+  params.set("cityGooglePlaceId", id);
+
+  const response = await fetch(
+    `${getApiBaseUrl()}/v1/cities/resolve?${params.toString()}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: options?.signal,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data: unknown = await response.json();
+  const row =
+    isRecord(data) && "city" in data ? (data as { city: unknown }).city : data;
+  const m = mapToCanonicalCity(row);
+  if (!m || m.lat == null || m.lng == null) {
+    throw new Error("No se pudo resolver la ciudad canónica.");
+  }
+  return m;
 }
 
 export async function fetchCitiesAutocomplete(

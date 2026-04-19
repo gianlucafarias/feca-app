@@ -123,6 +123,14 @@ export type OnboardingDraft = {
 
 export type GroupEventStatus = "proposed" | "confirmed" | "completed";
 
+export type GroupVisibility = "private" | "public_followers";
+
+export type PlaceProposalPolicy = "all_members" | "owner_only";
+
+export type MemberProposalInteraction = "collaborative" | "announcement_locked";
+
+export type GroupViewerMembership = "active" | "invited" | "none";
+
 export type GroupMemberRole = "owner" | "admin" | "member";
 
 export type GroupMemberStatus = "invited" | "active" | "declined" | "left";
@@ -143,6 +151,24 @@ export type GroupEvent = {
   status: GroupEventStatus;
   proposedBy: User;
   myRsvp?: EventRsvp | null;
+  allowsRsvp?: boolean;
+  allowsConfirm?: boolean;
+  allowsCounterProposals?: boolean;
+};
+
+/** Plan público de la lista “amigos”; datos limitados por privacidad. */
+export type FriendPublicPlan = {
+  id: string;
+  name: string;
+  createdBy: User;
+  friendParticipant: User;
+  nextEvent: {
+    date: string;
+    placeName: string;
+    areaLabel: string;
+    status: GroupEventStatus;
+  } | null;
+  memberCount: number;
 };
 
 export type FecaGroup = {
@@ -152,11 +178,20 @@ export type FecaGroup = {
   createdBy: User;
   members: GroupMember[];
   events: GroupEvent[];
+  visibility: GroupVisibility;
+  placeProposalPolicy: PlaceProposalPolicy;
+  memberProposalInteraction: MemberProposalInteraction;
+  viewerMembership?: GroupViewerMembership;
+  /** Con vista pública y sin lista de miembros. */
+  memberCount?: number;
 };
 
 export type CreateGroupInput = {
   name: string;
   memberIds: string[];
+  visibility?: GroupVisibility;
+  placeProposalPolicy?: PlaceProposalPolicy;
+  memberProposalInteraction?: MemberProposalInteraction;
 };
 
 export type AddGroupEventInput = {

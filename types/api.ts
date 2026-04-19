@@ -74,6 +74,30 @@ export type CreateVisitPayload = {
   petFriendly?: boolean;
 };
 
+/** Preferencia para aceptar invitaciones a planes (PATCH /v1/me). */
+export type ApiGroupInvitePolicy = "everyone" | "from_following_only";
+
+/** Preferencias privadas de salida (GET/PATCH /v1/me); no son perfil público. */
+export type ApiOutingCompany = "solo" | "couple" | "small_group" | "large_group";
+
+export type ApiOutingPreferencesV1 = {
+  schemaVersion: 1;
+  typicalOutingSlots?: Array<
+    | "weekday_morning"
+    | "weekday_afternoon"
+    | "weekday_evening"
+    | "weekend_day"
+    | "weekend_night"
+  >;
+  /** Varias opciones; el backend acepta también el campo viejo `typicalCompany` al guardar. */
+  typicalCompanies?: ApiOutingCompany[];
+  /** @deprecated Preferir `typicalCompanies`. */
+  typicalCompany?: ApiOutingCompany;
+  placePriorities?: Array<
+    "atmosphere" | "distance" | "food_drink" | "price" | "quiet" | "service"
+  >;
+};
+
 export type ApiMeUser = ApiUserPublic & {
   email?: string;
   cityGooglePlaceId?: string | null;
@@ -84,6 +108,10 @@ export type ApiMeUser = ApiUserPublic & {
   savedCount?: number;
   followingCount?: number;
   followersCount?: number;
+  groupInvitePolicy?: ApiGroupInvitePolicy | null;
+  outingPreferences?: ApiOutingPreferencesV1 | null;
+  isAdmin?: boolean;
+  isEditor?: boolean;
 };
 
 /** Perfil público (GET /v1/users/:id): relación con el usuario autenticado. */
@@ -127,6 +155,12 @@ export type ApiSavedPlaceRow = {
 
 export type ApiGroupEventStatus = "proposed" | "confirmed" | "completed";
 
+export type ApiGroupVisibility = "private" | "public_followers";
+
+export type ApiPlaceProposalPolicy = "all_members" | "owner_only";
+
+export type ApiMemberProposalInteraction = "collaborative" | "announcement_locked";
+
 /** Alineado al modelo de membresía en backend (roles / invitación). */
 export type ApiGroupMemberRole = "owner" | "admin" | "member";
 
@@ -149,7 +183,35 @@ export type ApiGroupEvent = {
   status: ApiGroupEventStatus;
   proposedBy: ApiUserPublic;
   myRsvp?: ApiEventRsvp | null;
+  /** Si el backend los envía, la UI ajusta acciones (RSVP, confirmar, contra-propuestas). */
+  allowsRsvp?: boolean | null;
+  allowsConfirm?: boolean | null;
+  allowsCounterProposals?: boolean | null;
 };
+
+/**
+ * Vista mínima de un plan público donde participa alguien que vos seguís.
+ * Sin `inviteCode`, sin lista completa de miembros ni direcciones exactas.
+ */
+export type ApiFriendPublicPlanSummary = {
+  id: string;
+  name: string;
+  createdBy: ApiUserPublic;
+  /** Seguido tuyo que es miembro activo del plan (contexto social). */
+  friendParticipant: ApiUserPublic;
+  nextEvent?: {
+    date: string;
+    /** Nombre comercial del lugar (ej. café), no domicilio particular. */
+    placeName: string;
+    /** Barrio o ciudad para contexto sin exponer calle/número. */
+    areaLabel?: string | null;
+    status: ApiGroupEventStatus;
+  } | null;
+  memberCount?: number;
+};
+
+/** Relación del viewer con el plan en `GET /v1/groups/:id` (vista pública vs miembro). */
+export type ApiGroupViewerMembership = "active" | "invited" | "none";
 
 export type ApiGroup = {
   id: string;
@@ -159,6 +221,13 @@ export type ApiGroup = {
   createdBy: ApiUserPublic;
   members: ApiGroupMember[];
   events: ApiGroupEvent[];
+  visibility?: ApiGroupVisibility | null;
+  placeProposalPolicy?: ApiPlaceProposalPolicy | null;
+  memberProposalInteraction?: ApiMemberProposalInteraction | null;
+  /** Si el backend lo envía: `none` = resumen público sin ser miembro. */
+  viewerMembership?: ApiGroupViewerMembership | null;
+  /** En vista pública con `members` vacío, total de miembros activos. */
+  memberCount?: number | null;
 };
 
 /** Visibilidad de guía (listas curadas / compartibles). */

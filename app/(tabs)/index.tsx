@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -10,9 +11,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
 
 import { ActivityFeedRow } from "@/components/home/activity-feed-row";
+import { EditorGuidesSlider } from "@/components/home/editor-guides-slider";
 import { NearbyPlacesSlider } from "@/components/home/nearby-places-slider";
 import { ChangeCitySheet } from "@/components/ui/change-city-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -20,15 +21,39 @@ import { PageBackground } from "@/components/ui/page-background";
 import { ReviewDetailSheet } from "@/components/ui/review-detail-sheet";
 import { paddingBottomWithFloatingTabBar } from "@/components/ui/screen-padding";
 import { TabScreenHeader } from "@/components/ui/tab-screen-header";
+import { useEditorGuides } from "@/hooks/use-editor-guides";
 import { useHomeFeed } from "@/hooks/use-home-feed";
-import { useNearbyPlaces } from "@/hooks/use-nearby-places";
+import { useHomePlaceCarousels } from "@/hooks/use-home-place-carousels";
+import { useRecentPlaceViews } from "@/hooks/use-recent-place-views";
 import { useAuth } from "@/providers/auth-provider";
+import { useUnreadNotifications } from "@/providers/unread-notifications-provider";
 import { fecaTheme } from "@/theme/feca";
 import type { FeedItem, Visit } from "@/types/feca";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { unreadCount } = useUnreadNotifications();
+
+  const [reviewVisit, setReviewVisit] = useState<Visit | null>(null);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [cityPickerNonce, setCityPickerNonce] = useState(0);
+  /** Hasta que la sesión refleje el mismo cityGooglePlaceId, mostramos el texto guardado (evita hero “pegado” al valor viejo). */
+  const [cityUi, setCityUi] = useState<{
+    label: string;
+    placeId: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!session) {
+      setCityUi(null);
+      return;
+    }
+    if (cityUi && session.user.cityGooglePlaceId === cityUi.placeId) {
+      setCityUi(null);
+    }
+  }, [session, cityUi]);
+
   const {
     listData,
     isLoading,
@@ -37,27 +62,42 @@ export default function HomeScreen() {
     showTrustFallbackInvite,
   } = useHomeFeed({
     accessToken: session?.accessToken,
+    cityGooglePlaceId: cityUi?.placeId ?? session?.user.cityGooglePlaceId,
     lat: session?.user.lat,
     lng: session?.user.lng,
-    mode: "city",
+    mode: "network",
   });
 
   const {
-    places: nearbyPlaces,
-    isLoading: nearbyLoading,
-    error: nearbyError,
-    refresh: refreshNearby,
-  } = useNearbyPlaces({
+    nearby,
+    openNow,
+    friends,
+    refreshAll: refreshPlaceCarousels,
+    anyLoading: placeCarouselsLoading,
+  } = useHomePlaceCarousels({
     accessToken: session?.accessToken,
     lat: session?.user.lat,
     lng: session?.user.lng,
   });
 
-  const [reviewVisit, setReviewVisit] = useState<Visit | null>(null);
-  const [cityPickerOpen, setCityPickerOpen] = useState(false);
-  const [cityPickerNonce, setCityPickerNonce] = useState(0);
+  const {
+    places: recentProfilePlaces,
+    isLoading: recentPlacesLoading,
+    refresh: refreshRecentPlaces,
+  } = useRecentPlaceViews();
 
-  const city = session?.user.city?.trim() ?? "";
+  const {
+    diaries: editorGuides,
+    isLoading: editorGuidesLoading,
+    error: editorGuidesError,
+    refresh: refreshEditorGuides,
+  } = useEditorGuides({
+    accessToken: session?.accessToken,
+    limit: 20,
+  });
+
+  const city =
+    cityUi?.label.trim() || session?.user.city?.trim() || "";
 
   const openCityPicker = () => {
     setCityPickerNonce((n) => n + 1);
@@ -66,8 +106,10 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(() => {
     void refreshFeed();
-    void refreshNearby();
-  }, [refreshFeed, refreshNearby]);
+    void refreshPlaceCarousels();
+    void refreshRecentPlaces();
+    void refreshEditorGuides();
+  }, [refreshEditorGuides, refreshFeed, refreshPlaceCarousels, refreshRecentPlaces]);
 
   return (
     <PageBackground>
@@ -78,6 +120,11 @@ export default function HomeScreen() {
         ]}
         contentInsetAdjustmentBehavior="never"
         data={listData}
+        extraData={{
+          cityLine: city,
+          sessionPid: session?.user.cityGooglePlaceId,
+          uiPid: cityUi?.placeId,
+        }}
         removeClippedSubviews={false}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         keyExtractor={(item) => item.id}
@@ -97,7 +144,7 @@ export default function HomeScreen() {
               description={
                 showTrustFallbackInvite
                   ? "Cuando haya visitas de tu red, las vas a ver acá."
-                  : "Cuando haya reseñas públicas en tu ciudad, las vas a ver acá."
+                  : "Seguí gente cuyo gusto te importe o explorá más en la pestaña Explorar."
               }
               icon="sparkles-outline"
               title="Nada por acá"
@@ -109,13 +156,17 @@ export default function HomeScreen() {
             <TabScreenHeader
               showNotifications={Boolean(session?.accessToken)}
               onPressNotifications={() => router.push("/notifications")}
+              unreadCount={unreadCount}
             />
 
             <View style={styles.hero}>
               {session?.accessToken ? (
                 <View style={styles.heroTitleStack}>
-                  <Text style={styles.heroPreLine}>Lugares para</Text>
-                  <Text style={styles.heroPreLine}>visitar en</Text>
+                  <Text style={styles.heroPreLine}>Lugares por</Text>
+                  <Text style={styles.heroSecondLine}>
+                    <Text style={styles.heroPreLine}>visitar</Text>
+                    <Text style={styles.heroPreLine}> en</Text>
+                  </Text>
                   <Pressable
                     accessibilityHint="Abre el selector de ciudad"
                     accessibilityLabel="Cambiar ciudad"
@@ -136,8 +187,11 @@ export default function HomeScreen() {
                 </View>
               ) : (
                 <View style={styles.heroTitleStack}>
-                  <Text style={styles.heroPreLine}>Lugares para</Text>
-                  <Text style={styles.heroPreLine}>visitar en tu ciudad</Text>
+                  <Text style={styles.heroPreLine}>Lugares por</Text>
+                  <Text style={styles.heroSecondLine}>
+                    <Text style={styles.heroAccentWord}>visitar</Text>
+                    <Text style={styles.heroSecondLineRest}> en tu ciudad</Text>
+                  </Text>
                   <Text style={styles.heroCityMuted}>
                     Iniciá sesión para elegir y cambiar la ciudad
                   </Text>
@@ -145,14 +199,51 @@ export default function HomeScreen() {
               )}
             </View>
 
-            <View style={styles.sliderSection}>
-              <NearbyPlacesSlider
-                error={nearbyError}
-                isLoading={nearbyLoading}
-                onRetry={() => void refreshNearby()}
-                places={nearbyPlaces}
-              />
-            </View>
+            {session?.accessToken ? (
+              <View style={styles.sliderSection}>
+                <EditorGuidesSlider
+                  diaries={editorGuides}
+                  error={editorGuidesError}
+                  isLoading={editorGuidesLoading}
+                  onRetry={() => void refreshEditorGuides()}
+                  title="Guías de editores"
+                />
+                <NearbyPlacesSlider
+                  error={openNow.error}
+                  hideWhenEmptyAfterLoad
+                  isLoading={openNow.isLoading}
+                  onRetry={() => void refreshPlaceCarousels()}
+                  places={openNow.places}
+                  title="Abierto ahora"
+                />
+                <NearbyPlacesSlider
+                  error={friends.error}
+                  hideWhenEmptyAfterLoad
+                  isLoading={friends.isLoading}
+                  onRetry={() => void refreshPlaceCarousels()}
+                  places={friends.places}
+                  title="A tus amigos les gustó"
+                />
+                <NearbyPlacesSlider
+                  error={nearby.error}
+                  hint="Para más variedad y filtros, abrí Explorar."
+                  isLoading={nearby.isLoading}
+                  onRetry={() => void refreshPlaceCarousels()}
+                  places={nearby.places}
+                  showMapLink
+                  title="Lugares cerca"
+                />
+                <NearbyPlacesSlider
+                  error={null}
+                  hideWhenEmptyAfterLoad
+                  hint="Los lugares cuya ficha abriste en FECA."
+                  isLoading={recentPlacesLoading}
+                  onRetry={() => void refreshRecentPlaces()}
+                  places={recentProfilePlaces}
+                  title="Visitaste recientemente"
+                />
+              </View>
+            ) : null}
 
             <View style={styles.feedIntro}>
               {session?.accessToken && !showTrustFallbackInvite ? (
@@ -205,7 +296,8 @@ export default function HomeScreen() {
             onRefresh={() => void onRefresh()}
             refreshing={
               (isLoading && listData.length > 0) ||
-              (nearbyLoading && nearbyPlaces.length > 0)
+              (Boolean(session?.accessToken) &&
+                (placeCarouselsLoading || editorGuidesLoading))
             }
             tintColor={fecaTheme.colors.primary}
           />
@@ -229,6 +321,12 @@ export default function HomeScreen() {
         initialCity={session?.user.city ?? ""}
         initialLat={session?.user.lat}
         initialLng={session?.user.lng}
+        onCitySaved={({ cityGooglePlaceId, displayName }) => {
+          setCityUi({ label: displayName, placeId: cityGooglePlaceId });
+          void refreshFeed();
+          void refreshPlaceCarousels();
+          void refreshRecentPlaces();
+        }}
         onClose={() => setCityPickerOpen(false)}
         resetKey={cityPickerOpen ? cityPickerNonce : null}
         visible={cityPickerOpen}
@@ -265,6 +363,25 @@ const styles = StyleSheet.create({
     lineHeight: 44,
     marginBottom: -2,
   },
+  /** Segunda línea del hero: acento “visitar” + continuación más ligera */
+  heroSecondLine: {
+    marginBottom: -2,
+    marginTop: -2,
+  },
+  heroAccentWord: {
+    color: fecaTheme.colors.onSurface,
+    fontFamily: "Newsreader_700Bold_Italic",
+    fontSize: 46,
+    letterSpacing: -0.6,
+    lineHeight: 48,
+  },
+  heroSecondLineRest: {
+    color: fecaTheme.colors.onSurfaceVariant,
+    fontFamily: "Newsreader_500Medium_Italic",
+    fontSize: 30,
+    letterSpacing: -0.3,
+    lineHeight: 48,
+  },
   heroCityTap: {
     alignItems: "center",
     flexDirection: "row",
@@ -292,6 +409,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   sliderSection: {
+    gap: fecaTheme.spacing.lg,
     paddingHorizontal: fecaTheme.spacing.lg,
     paddingTop: fecaTheme.spacing.sm,
   },

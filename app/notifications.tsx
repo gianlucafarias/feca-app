@@ -24,6 +24,7 @@ import {
   markNotificationRead,
 } from "@/lib/api/notifications";
 import { useAuth } from "@/providers/auth-provider";
+import { useUnreadNotifications } from "@/providers/unread-notifications-provider";
 import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { ApiNotification } from "@/types/api";
 
@@ -95,6 +96,7 @@ function openFromNotification(n: ApiNotification) {
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { refreshUnreadCount } = useUnreadNotifications();
   const [items, setItems] = useState<ApiNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -114,8 +116,9 @@ export default function NotificationsScreen() {
       setItems([]);
     } finally {
       setLoading(false);
+      void refreshUnreadCount();
     }
-  }, [session?.accessToken]);
+  }, [session?.accessToken, refreshUnreadCount]);
 
   useEffect(() => {
     void load();
@@ -133,12 +136,13 @@ export default function NotificationsScreen() {
     try {
       await markAllNotificationsRead(session.accessToken);
       setItems((prev) => prev.map((x) => ({ ...x, read: true })));
+      void refreshUnreadCount();
     } catch {
       /* ignore */
     } finally {
       setMarkAllBusy(false);
     }
-  }, [session?.accessToken, markAllBusy]);
+  }, [session?.accessToken, markAllBusy, refreshUnreadCount]);
 
   const handleOpen = useCallback(
     (n: ApiNotification) => {
@@ -150,6 +154,7 @@ export default function NotificationsScreen() {
             setItems((prev) =>
               prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
             );
+            void refreshUnreadCount();
           }
         } catch {
           /* ignore */
@@ -157,7 +162,7 @@ export default function NotificationsScreen() {
         openFromNotification(n);
       })();
     },
-    [session?.accessToken],
+    [session?.accessToken, refreshUnreadCount],
   );
 
   const listPaddingBottom = paddingBottomStackScreen(insets.bottom);

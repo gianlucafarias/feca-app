@@ -20,6 +20,10 @@ function getGoogleIosUrlScheme(): string {
 
 const googleIosUrlScheme = getGoogleIosUrlScheme();
 
+/** Para `getExpoPushTokenAsync` (EAS). Ver https://docs.expo.dev/push-notifications/push-notifications-setup/ */
+const easProjectId =
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? "";
+
 const config: ExpoConfig = {
   name: "feca",
   slug: "feca",
@@ -44,7 +48,7 @@ const config: ExpoConfig = {
     /** `resize` reduce el área útil con el teclado abierto (evita tapar inputs/sugerencias). */
     softwareKeyboardLayoutMode: "resize",
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
+      backgroundColor: "#fcf9f6",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -56,6 +60,11 @@ const config: ExpoConfig = {
     output: "static",
     favicon: "./assets/images/favicon.png",
   },
+  extra: {
+    eas: {
+      projectId: easProjectId,
+    },
+  },
   plugins: [
     "expo-router",
     [
@@ -64,9 +73,9 @@ const config: ExpoConfig = {
         image: "./assets/images/splash-icon.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#ffffff",
+        backgroundColor: "#fcf9f6",
         dark: {
-          backgroundColor: "#000000",
+          backgroundColor: "#27272a",
         },
       },
     ],
@@ -84,6 +93,14 @@ const config: ExpoConfig = {
       },
     ],
     "expo-secure-store",
+    [
+      "expo-notifications",
+      {
+        icon: "./assets/images/icon.png",
+        color: "#595F6A",
+      },
+    ],
+    "@react-native-community/datetimepicker",
   ],
   experiments: {
     typedRoutes: true,

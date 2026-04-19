@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
   Modal,
@@ -17,7 +18,8 @@ import {
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBackground } from "@/components/ui/page-background";
-import { addPlaceToDiaryApi, fetchDiary } from "@/lib/api/diaries";
+import { addPlaceToDiaryApi, fetchDiary, updateDiaryApi } from "@/lib/api/diaries";
+import { fetchPlacesAutocomplete } from "@/lib/api/places";
 import { fetchMySavedPlaces } from "@/lib/api/saved";
 import { fetchMyVisits } from "@/lib/api/visits";
 import { mapApiDiaryToCafeDiary, mapApiSavedRowToSavedPlace } from "@/lib/feca/map-api-social";
@@ -25,6 +27,15 @@ import { mapApiVisitToVisit } from "@/lib/visits/map-api-visit";
 import { useAuth } from "@/providers/auth-provider";
 import { fecaTheme } from "@/theme/feca";
 import type { CafeDiary, GuideVisibility, Place, SavedPlace, Visit } from "@/types/feca";
+import type { ApiPlaceAutocompleteItem } from "@/types/places";
+
+const WINDOW_H = Dimensions.get("window").height;
+/** El FlatList del modal necesita altura acotada; sin esto el listado no se renderiza bien. */
+const ADD_STOP_LIST_HEIGHT = Math.min(Math.round(WINDOW_H * 0.48), 420);
+
+type AddStopRow =
+  | { kind: "local"; place: Place }
+  | { kind: "remote"; item: ApiPlaceAutocompleteItem };
 
 function guideVisibilityLabel(v: GuideVisibility | null | undefined): string | null {
   if (v === "public") return "Pública";
@@ -45,7 +56,9 @@ export default function DiaryDetailScreen() {
 
   const [addVisible, setAddVisible] = useState(false);
   const [search, setSearch] = useState("");
-  const deferredSearch = useDeferredValue(search);
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [remoteItems, setRemoteItems] = useState<ApiPlaceAutocompleteItem[] | null>(null);
+  const [remoteLoading, setRemoteLoading] = useState(false);
 
   useEffect(() => {
     if (!id || !accessToken) {
@@ -80,6 +93,65 @@ export default function DiaryDetailScreen() {
       });
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!addVisible) {
+      setSearch("");
+      setRemoteItems(null);
+      setRemoteLoading(false);
+    }
+  }, [addVisible]);
+
+  useEffect(() => {
+    if (!addVisible || !accessToken) {
+      return;
+    }
+    const q = search.trim();
+    if (q.length < 2) {
+      setRemoteItems(null);
+      setRemoteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRemoteLoading(true);
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetchPlacesAutocomplete(accessToken, {
+            q,
+            city: session?.user.city,
+            lat: session?.user.lat,
+            lng: session?.user.lng,
+            limit: 10,
+          });
+          if (!cancelled) {
+            setRemoteItems(res.items ?? []);
+          }
+        } catch {
+          if (!cancelled) {
+            setRemoteItems([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setRemoteLoading(false);
+          }
+        }
+      })();
+    }, 340);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    accessToken,
+    addVisible,
+    search,
+    session?.user.city,
+    session?.user.lat,
+    session?.user.lng,
+  ]);
+
   const profileVisits = useMemo(() => apiVisits ?? [], [apiVisits]);
   const savedPlaces = useMemo(() => apiSaved ?? [], [apiSaved]);
   const diary = apiDiary;
@@ -95,6 +167,14 @@ export default function DiaryDetailScreen() {
   }, [profileVisits]);
 
   const visibilityLabel = diary ? guideVisibilityLabel(diary.visibility) : null;
+
+  const isOwner = Boolean(
+    session?.user.id && diary && session.user.id === diary.createdBy.id,
+  );
+  const canPublishGuide =
+    isOwner &&
+    diary &&
+    (diary.visibility !== "public" || !diary.publishedAt?.trim());
 
   const allPlaces = useMemo(() => {
     const seen = new Set<string>();
@@ -120,14 +200,92 @@ export default function DiaryDetailScreen() {
     [diary?.places],
   );
 
-  const availablePlaces = useMemo(() => {
-    const list = allPlaces.filter((p) => !diaryPlaceIds.has(p.id));
-    if (!deferredSearch.trim()) return list;
-    const q = deferredSearch.toLowerCase();
-    return list.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.neighborhood.toLowerCase().includes(q),
-    );
-  }, [allPlaces, diaryPlaceIds, deferredSearch]);
+  const diaryGooglePlaceIds = useMemo(
+    () =>
+      new Set(
+        (diary?.places ?? [])
+          .map((p) => p.googlePlaceId)
+          .filter((gid): gid is string => Boolean(gid?.trim())),
+      ),
+    [diary?.places],
+  );
+
+  const availablePlacesBase = useMemo(
+    () => allPlaces.filter((p) => !diaryPlaceIds.has(p.id)),
+    [allPlaces, diaryPlaceIds],
+  );
+
+  const localPlacesMatchingSearch = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) {
+      return availablePlacesBase;
+    }
+    return availablePlacesBase.filter((p) => {
+      const name = (p.name ?? "").toLowerCase();
+      const neighborhood = (p.neighborhood ?? "").toLowerCase();
+      const city = (p.city ?? "").toLowerCase();
+      return name.includes(q) || neighborhood.includes(q) || city.includes(q);
+    });
+  }, [availablePlacesBase, search]);
+
+  const addStopRows = useMemo((): AddStopRow[] => {
+    const q = search.trim();
+    if (q.length >= 2 && remoteItems !== null) {
+      return remoteItems
+        .filter((item) => {
+          if (item.placeId && diaryPlaceIds.has(item.placeId)) {
+            return false;
+          }
+          if (item.sourcePlaceId && diaryGooglePlaceIds.has(item.sourcePlaceId)) {
+            return false;
+          }
+          return true;
+        })
+        .map((item) => ({ kind: "remote" as const, item }));
+    }
+    return localPlacesMatchingSearch.map((place) => ({ kind: "local" as const, place }));
+  }, [
+    diaryGooglePlaceIds,
+    diaryPlaceIds,
+    localPlacesMatchingSearch,
+    remoteItems,
+    search,
+  ]);
+
+  const handleAddRemoteItem = (item: ApiPlaceAutocompleteItem) => {
+    const diaryId = id ?? "";
+    if (!diaryId || !accessToken) {
+      return;
+    }
+
+    const body =
+      item.placeId?.trim()
+        ? {
+            placeId: item.placeId.trim(),
+            ...(item.sourcePlaceId?.trim()
+              ? { googlePlaceId: item.sourcePlaceId.trim() }
+              : {}),
+          }
+        : item.sourcePlaceId?.trim()
+          ? { googlePlaceId: item.sourcePlaceId.trim() }
+          : null;
+
+    if (!body) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const updated = await addPlaceToDiaryApi(diaryId, accessToken, body);
+        setApiDiary(mapApiDiaryToCafeDiary(updated));
+        setAddVisible(false);
+        setSearch("");
+        setRemoteItems(null);
+      } catch {
+        Alert.alert("No se pudo agregar", "Reintentá o elegí otro resultado.");
+      }
+    })();
+  };
 
   const handleAddPlace = (place: Place) => {
     const diaryId = id ?? "";
@@ -144,6 +302,7 @@ export default function DiaryDetailScreen() {
         setApiDiary(mapApiDiaryToCafeDiary(updated));
         setAddVisible(false);
         setSearch("");
+        setRemoteItems(null);
       } catch {
         return;
       }
@@ -194,9 +353,47 @@ export default function DiaryDetailScreen() {
           <Pressable onPress={() => router.back()} style={styles.navBtn}>
             <Ionicons color={fecaTheme.colors.onSurface} name="chevron-back" size={20} />
           </Pressable>
-          <Pressable onPress={() => { setSearch(""); setAddVisible(true); }} style={styles.addBtn}>
-            <Ionicons color={fecaTheme.colors.onPrimary} name="add" size={20} />
-          </Pressable>
+          <View style={styles.topBarRight}>
+            {canPublishGuide && accessToken ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={publishBusy}
+                onPress={() => {
+                  const diaryId = id ?? "";
+                  if (!diaryId || !accessToken) {
+                    return;
+                  }
+                  void (async () => {
+                    setPublishBusy(true);
+                    try {
+                      const updated = await updateDiaryApi(diaryId, accessToken, {
+                        visibility: "public",
+                      });
+                      setApiDiary(mapApiDiaryToCafeDiary(updated));
+                    } catch {
+                      Alert.alert(
+                        "No se pudo publicar",
+                        "Reintentá o comprobá tu conexión.",
+                      );
+                    } finally {
+                      setPublishBusy(false);
+                    }
+                  })();
+                }}
+                style={({ pressed }) => [
+                  styles.publishBtn,
+                  (pressed || publishBusy) && styles.publishBtnPressed,
+                ]}
+              >
+                <Text style={styles.publishBtnLabel}>
+                  {publishBusy ? "Publicando…" : "Publicar"}
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable onPress={() => { setSearch(""); setAddVisible(true); }} style={styles.addBtn}>
+              <Ionicons color={fecaTheme.colors.onPrimary} name="add" size={20} />
+            </Pressable>
+          </View>
         </View>
 
         {diary.coverImageUrl ? (
@@ -301,8 +498,9 @@ export default function DiaryDetailScreen() {
             <View style={styles.searchRow}>
               <Ionicons color={fecaTheme.colors.muted} name="search" size={16} />
               <TextInput
+                autoCorrect={false}
                 onChangeText={setSearch}
-                placeholder="Buscar café..."
+                placeholder="Nombre del café (2+ letras: Google + FECA)"
                 placeholderTextColor={fecaTheme.colors.muted}
                 style={styles.searchInput}
                 value={search}
@@ -314,27 +512,77 @@ export default function DiaryDetailScreen() {
               ) : null}
             </View>
 
+            {remoteLoading && search.trim().length >= 2 && remoteItems === null ? (
+              <View style={styles.remoteLoadingBanner}>
+                <ActivityIndicator color={fecaTheme.colors.primary} size="small" />
+                <Text style={styles.remoteLoadingText}>Buscando en Google…</Text>
+              </View>
+            ) : null}
+
             <FlatList
               contentContainerStyle={styles.modalList}
-              data={availablePlaces}
-              keyExtractor={(p) => p.id}
+              data={addStopRows}
+              keyExtractor={(row) =>
+                row.kind === "local" ? `l-${row.place.id}` : `r-${row.item.id}`
+              }
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <Text style={styles.emptyText}>
-                  {deferredSearch.trim() ? "Sin resultados" : "Todos los cafés ya están en esta guía"}
+                  {(() => {
+                    const q = search.trim();
+                    if (remoteLoading && q.length >= 2) {
+                      return "Buscando…";
+                    }
+                    if (q.length >= 2 && !remoteLoading && addStopRows.length === 0) {
+                      return "Sin resultados en Google ni en FECA.";
+                    }
+                    if (q.length > 0 && q.length < 2 && addStopRows.length === 0) {
+                      return "Sin coincidencias en tus lugares. Escribí 2 letras o más para buscar en Google.";
+                    }
+                    if (q.length === 0 && availablePlacesBase.length === 0) {
+                      return "No hay cafés para agregar (visitá o guardá lugares primero).";
+                    }
+                    return "Sin resultados.";
+                  })()}
                 </Text>
               }
-              renderItem={({ item }) => (
-                <Pressable onPress={() => handleAddPlace(item)} style={styles.modalRow}>
-                  <View style={[styles.placeDot, { backgroundColor: item.accent }]} />
-                  <View style={styles.placeInfo}>
-                    <Text style={styles.placeName}>{item.name}</Text>
-                    <Text style={styles.placeMeta}>{item.neighborhood}</Text>
-                  </View>
-                  <Ionicons color={fecaTheme.colors.primary} name="add-circle" size={22} />
-                </Pressable>
-              )}
+              renderItem={({ item: row }) =>
+                row.kind === "local" ? (
+                  <Pressable
+                    onPress={() => handleAddPlace(row.place)}
+                    style={styles.modalRow}
+                  >
+                    <View style={[styles.placeDot, { backgroundColor: row.place.accent }]} />
+                    <View style={styles.placeInfo}>
+                      <Text style={styles.placeName}>{row.place.name}</Text>
+                      <Text style={styles.placeMeta}>
+                        {row.place.neighborhood}
+                        {row.place.city ? ` · ${row.place.city}` : ""}
+                      </Text>
+                    </View>
+                    <Ionicons color={fecaTheme.colors.primary} name="add-circle" size={22} />
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => handleAddRemoteItem(row.item)}
+                    style={styles.modalRow}
+                  >
+                    <View style={[styles.placeDot, { backgroundColor: fecaTheme.colors.primary }]} />
+                    <View style={styles.placeInfo}>
+                      <Text style={styles.placeName}>{row.item.name}</Text>
+                      <Text numberOfLines={2} style={styles.placeMeta}>
+                        {row.item.address || row.item.city || "Google Places"}
+                      </Text>
+                      {row.item.alreadyInFeca ? (
+                        <Text style={styles.inFecaHint}>En FECA</Text>
+                      ) : null}
+                    </View>
+                    <Ionicons color={fecaTheme.colors.primary} name="add-circle" size={22} />
+                  </Pressable>
+                )
+              }
               showsVerticalScrollIndicator={false}
+              style={styles.modalFlatList}
             />
           </View>
         </View>
@@ -377,6 +625,25 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: "center",
     width: 40,
+  },
+  topBarRight: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: fecaTheme.spacing.sm,
+  },
+  publishBtn: {
+    backgroundColor: fecaTheme.surfaces.high,
+    borderRadius: fecaTheme.radii.pill,
+    paddingHorizontal: fecaTheme.spacing.md,
+    paddingVertical: 10,
+  },
+  publishBtnPressed: {
+    opacity: 0.88,
+  },
+  publishBtnLabel: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.primary,
+    fontWeight: "600",
   },
   coverHero: {
     borderRadius: fecaTheme.radii.lg,
@@ -521,10 +788,14 @@ const styles = StyleSheet.create({
     backgroundColor: fecaTheme.surfaces.lowest,
     borderTopLeftRadius: fecaTheme.radii.xl,
     borderTopRightRadius: fecaTheme.radii.xl,
-    maxHeight: "75%",
+    maxHeight: Math.round(WINDOW_H * 0.88),
     paddingBottom: 32,
     paddingTop: fecaTheme.spacing.lg,
     ...fecaTheme.elevation.floating,
+  },
+  modalFlatList: {
+    height: ADD_STOP_LIST_HEIGHT,
+    marginTop: fecaTheme.spacing.sm,
   },
   modalHeader: {
     alignItems: "center",
@@ -576,5 +847,21 @@ const styles = StyleSheet.create({
     color: fecaTheme.colors.muted,
     paddingVertical: fecaTheme.spacing.xl,
     textAlign: "center",
+  },
+  remoteLoadingBanner: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: fecaTheme.spacing.sm,
+    justifyContent: "center",
+    paddingVertical: fecaTheme.spacing.sm,
+  },
+  remoteLoadingText: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.muted,
+  },
+  inFecaHint: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.secondary,
+    marginTop: 2,
   },
 });

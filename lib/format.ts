@@ -5,6 +5,14 @@ const shortDateFormatter = new Intl.DateTimeFormat("es-UY", {
   month: "short",
 });
 
+/** Convierte una fecha local a `YYYY-MM-DD` (contrato `visitedAt`). */
+export function toVisitYyyyMmDd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Acepta `YYYY-MM-DD` (fecha local de visita) o ISO 8601 del API; evita fechas inválidas. */
 function parseDisplayDate(value: string): Date | null {
   const t = value.trim();

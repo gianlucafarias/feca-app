@@ -7,9 +7,12 @@ type FriendsResponse = {
   total: number;
 };
 
-type FollowingPayload = {
+const MAX_USER_LIST_LIMIT = 50;
+
+type UserListPayload = {
   users?: unknown[];
   friends?: unknown[];
+  following?: unknown[];
   total?: number;
 };
 
@@ -55,11 +58,11 @@ function extractApiUserPublic(raw: unknown): ApiUserPublic | null {
   };
 }
 
-function normalizeFollowingList(data: FollowingPayload): {
+function normalizeUserList(data: UserListPayload): {
   users: ApiUserPublic[];
   total: number;
 } {
-  const source = data.users ?? data.friends ?? [];
+  const source = data.users ?? data.friends ?? data.following ?? [];
   const users = source
     .map((entry) => extractApiUserPublic(entry))
     .filter((user): user is ApiUserPublic => Boolean(user));
@@ -67,15 +70,29 @@ function normalizeFollowingList(data: FollowingPayload): {
   return { users, total: data.total ?? users.length };
 }
 
+function clampLimit(limit?: number): number | undefined {
+  if (limit == null) return undefined;
+  return Math.min(Math.max(limit, 1), MAX_USER_LIST_LIMIT);
+}
+
+function buildUserListQuery(params?: {
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): string {
+  const search = new URLSearchParams();
+  if (params?.q) search.set("q", params.q);
+  const lim = clampLimit(params?.limit);
+  if (lim != null) search.set("limit", String(lim));
+  if (params?.offset != null) search.set("offset", String(params.offset));
+  return search.toString();
+}
+
 export async function fetchMyFollowing(
   accessToken: string,
   params?: { q?: string; limit?: number; offset?: number },
 ): Promise<{ users: ApiUserPublic[]; total: number }> {
-  const search = new URLSearchParams();
-  if (params?.q) search.set("q", params.q);
-  if (params?.limit != null) search.set("limit", String(params.limit));
-  if (params?.offset != null) search.set("offset", String(params.offset));
-  const qs = search.toString();
+  const qs = buildUserListQuery(params);
   const url = `${getApiBaseUrl()}/v1/me/following${qs ? `?${qs}` : ""}`;
 
   const response = await fetch(url, {
@@ -86,14 +103,51 @@ export async function fetchMyFollowing(
     throw new Error(await parseError(response));
   }
 
-  const raw = (await response.json()) as FollowingPayload;
-  return normalizeFollowingList(raw);
+  const raw = (await response.json()) as UserListPayload;
+  return normalizeUserList(raw);
 }
 
+/**
+ * Listado para invitar a planes / UI “amigos”.
+ * El contrato documentado es `GET /v1/me/friends`; si no existe en el servidor,
+ * se usa `GET /v1/me/following` como respaldo.
+ */
 export async function fetchMyFriends(
   accessToken: string,
   params?: { q?: string; limit?: number; offset?: number },
 ): Promise<FriendsResponse> {
-  const { users, total } = await fetchMyFollowing(accessToken, params);
-  return { friends: users, total };
+  const qs = buildUserListQuery(params);
+  const base = `${getApiBaseUrl()}/v1/me/friends${qs ? `?${qs}` : ""}`;
+
+  const friendsRes = await fetch(base, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (friendsRes.ok) {
+    const raw = (await friendsRes.json()) as UserListPayload;
+    let { users, total } = normalizeUserList(raw);
+    if (users.length === 0) {
+      try {
+        const alt = await fetchMyFollowing(accessToken, params);
+        if (alt.users.length > 0) {
+          users = alt.users;
+          total = alt.total;
+        }
+      } catch {
+        /* mantener lista vacía */
+      }
+    }
+    return { friends: users, total };
+  }
+
+  if (
+    friendsRes.status === 404 ||
+    friendsRes.status === 405 ||
+    friendsRes.status === 501
+  ) {
+    const { users, total } = await fetchMyFollowing(accessToken, params);
+    return { friends: users, total };
+  }
+
+  throw new Error(await parseError(friendsRes));
 }

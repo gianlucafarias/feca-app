@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { logCityChange } from "@/lib/debug/city-change-debug";
 import { fetchFeed } from "@/lib/api/visits";
 import { mapApiVisitToVisit } from "@/lib/visits/map-api-visit";
 import type { ApiFeedItem } from "@/types/api";
@@ -22,8 +23,9 @@ export function useHomeFeed(options: {
   mode: FeedMode;
   lat?: number;
   lng?: number;
+  cityGooglePlaceId?: string;
 }) {
-  const { accessToken, mode, lat, lng } = options;
+  const { accessToken, mode, lat, lng, cityGooglePlaceId } = options;
   const [apiItems, setApiItems] = useState<FeedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +40,23 @@ export function useHomeFeed(options: {
 
     setError(null);
     try {
+      const trimmedPlaceId = cityGooglePlaceId?.trim();
+      logCityChange("useHomeFeed fetchFeed", {
+        mode,
+        lat,
+        lng,
+        cityGooglePlaceId: trimmedPlaceId ?? null,
+      });
       const { items } = await fetchFeed(accessToken, {
         limit: 30,
         mode,
         lat,
         lng,
+        ...(mode === "city" && trimmedPlaceId
+          ? { cityGooglePlaceId: trimmedPlaceId }
+          : {}),
       });
+      logCityChange("useHomeFeed respuesta", { count: items.length, mode });
       setApiItems(mapApiToFeedItems(items));
     } catch (err) {
       const message =
@@ -53,7 +66,7 @@ export function useHomeFeed(options: {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, lat, lng, mode]);
+  }, [accessToken, cityGooglePlaceId, lat, lng, mode]);
 
   useEffect(() => {
     setIsLoading(true);

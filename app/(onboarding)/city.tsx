@@ -14,12 +14,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FormField } from "@/components/ui/form-field";
 import { GradientButton } from "@/components/ui/gradient-button";
+import { OnboardingProgressBar } from "@/components/ui/onboarding-progress-bar";
 import { PageBackground } from "@/components/ui/page-background";
+import { StackScreenHeader } from "@/components/ui/stack-screen-header";
 import { TextLinkButton } from "@/components/ui/text-link-button";
 import {
   useCityLocationPicker,
   type CityLocationDraft,
 } from "@/hooks/use-city-location-picker";
+import { useOnboardingBack } from "@/hooks/use-onboarding-back";
+import { getOnboardingRouteForSession } from "@/lib/auth/onboarding-route";
 import { hasCanonicalCity } from "@/lib/profile/canonical-city";
 import { rememberCity } from "@/lib/storage/recent-cities";
 import { useAuth } from "@/providers/auth-provider";
@@ -29,13 +33,10 @@ import { fecaTheme } from "@/theme/feca";
 export default function CityScreen() {
   const insets = useSafeAreaInsets();
 
-  const {
-    completeOnboarding: completeAuthOnboarding,
-    session,
-    updateProfile,
-  } = useAuth();
+  const { session, updateProfile } = useAuth();
   const { draft, resetDraft, updateDraft } = useOnboarding();
   const [isSaving, setIsSaving] = useState(false);
+  const goBack = useOnboardingBack();
 
   const onCityDraftChange = useCallback(
     (next: CityLocationDraft) => {
@@ -76,6 +77,8 @@ export default function CityScreen() {
     initialLat: draft.lat ?? session?.user.lat,
     initialLng: draft.lng ?? session?.user.lng,
     onDraftChange: onCityDraftChange,
+    /** Misma lógica que cambiar ciudad: evitar homónimos por sesgo regional al escribir. */
+    locationBiasInAutocomplete: false,
   });
 
   const isReady = hasCanonicalCity({
@@ -98,6 +101,7 @@ export default function CityScreen() {
 
   return (
     <PageBackground>
+      <StackScreenHeader title="Ciudad" onPressBack={goBack} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboard}
@@ -118,11 +122,11 @@ export default function CityScreen() {
         >
           <View style={styles.content}>
             <View style={styles.header}>
-              <Text style={styles.step}>PASO 2 DE 2</Text>
-              <Text style={styles.question}>¿De dónde sos?</Text>
+              <OnboardingProgressBar />
+              <Text style={styles.question}>Tu ciudad</Text>
               <Text style={styles.hint}>
-                Tu ciudad nos ayuda a mostrarte lo que hay cerca y ordenar mejor
-                FECA.
+                La usamos para mostrarte lugares cerca y ordenar lo que ves. Elegí la ciudad de la
+                lista para que coincida con el mapa.
               </Text>
             </View>
 
@@ -139,11 +143,11 @@ export default function CityScreen() {
               />
               {cityApiEnabled ? (
                 <Text style={styles.placesHint}>
-                  Escribí para ver sugerencias de ciudades (FECA).
+                  Escribí unas letras y elegí una sugerencia de la lista.
                 </Text>
               ) : (
                 <Text style={styles.placesHintMuted}>
-                  Iniciá sesión para buscar ciudades o usá tu ubicación actual.
+                  Iniciá sesión para buscar ciudades, o usá tu ubicación actual.
                 </Text>
               )}
               {suggestionsLoading ? (
@@ -176,7 +180,7 @@ export default function CityScreen() {
               ) : null}
               <TextLinkButton
                 label={
-                  isLocating ? "Detectando ubicación..." : "Usar mi ubicación actual"
+                  isLocating ? "Buscando tu ubicación…" : "Usar mi ubicación actual"
                 }
                 onPress={() => {
                   if (!isLocating) {
@@ -184,17 +188,13 @@ export default function CityScreen() {
                   }
                 }}
               />
-              {resolvedLabel ? (
-                <Text style={styles.helperText}>
-                  Ciudad seleccionada: {resolvedLabel}
-                </Text>
-              ) : null}
+            
             </View>
 
             <View style={styles.actions}>
               <GradientButton
                 disabled={!isReady || isSaving || isResolvingCity}
-                label={isSaving ? "Guardando..." : "Entrar a FECA"}
+                label={isSaving ? "Guardando…" : "Continuar"}
                 onPress={() => {
                   if (!isReady) {
                     return;
@@ -212,33 +212,39 @@ export default function CityScreen() {
                         lat,
                         lng,
                         username: fallbackUsername,
-                      }).then(() => ({
+                      }).then((nextSession) => ({
                         city,
                         cityGooglePlaceId,
                         displayName,
                         lat,
                         lng,
+                        nextSession,
                       })),
                     )
-                    .then(({ city, cityGooglePlaceId, displayName, lat, lng }) =>
+                    .then(({ city, cityGooglePlaceId, displayName, lat, lng, nextSession }) =>
                       rememberCity({
                         label: displayName,
                         city,
                         cityGooglePlaceId,
                         lat,
                         lng,
-                      }),
+                      }).then(() => nextSession),
                     )
-                    .then(async () => {
+                    .then(async (nextSession) => {
                       resetDraft();
-                      await completeAuthOnboarding();
-                      router.replace("/(tabs)");
+                      const href =
+                        getOnboardingRouteForSession(nextSession) ?? "/(tabs)";
+                      if (href === "/(tabs)") {
+                        router.replace(href);
+                      } else {
+                        router.push(href);
+                      }
                     })
                     .catch((error) => {
                       const message =
                         error instanceof Error
                           ? error.message
-                          : "No se pudo guardar tu perfil";
+                          : "No pudimos guardar. Revisá la conexión e intentá de nuevo.";
                       setSubmitError(message);
                     })
                     .finally(() => {
@@ -249,7 +255,7 @@ export default function CityScreen() {
               {submitError ? (
                 <Text style={styles.errorText}>{submitError}</Text>
               ) : null}
-              <TextLinkButton label="Volver" onPress={() => router.back()} />
+              <TextLinkButton label="Atrás" onPress={goBack} />
             </View>
           </View>
         </ScrollView>
@@ -269,15 +275,10 @@ const styles = StyleSheet.create({
   content: {
     gap: fecaTheme.spacing.xxl,
     paddingHorizontal: fecaTheme.spacing.xl,
-    paddingTop: 100,
+    paddingTop: fecaTheme.spacing.md,
   },
   header: {
-    gap: fecaTheme.spacing.sm,
-  },
-  step: {
-    ...fecaTheme.typography.label,
-    color: fecaTheme.colors.secondary,
-    letterSpacing: 2,
+    gap: fecaTheme.spacing.md,
   },
   question: {
     ...fecaTheme.typography.display,

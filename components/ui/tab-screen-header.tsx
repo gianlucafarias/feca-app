@@ -8,11 +8,14 @@ type TabScreenHeaderProps = {
   /** Mostrar campana (p. ej. cuando hay sesión) */
   showNotifications?: boolean;
   onPressNotifications?: () => void;
+  /** Notificaciones no leídas (API); >0 cambia el icono y muestra punto */
+  unreadCount?: number;
 };
 
 export function TabScreenHeader({
   showNotifications = false,
   onPressNotifications,
+  unreadCount = 0,
 }: TabScreenHeaderProps) {
   const insets = useSafeAreaInsets();
 
@@ -28,17 +31,24 @@ export function TabScreenHeader({
       <View style={[styles.side, styles.sideRight]}>
         {showNotifications && onPressNotifications ? (
           <Pressable
-            accessibilityLabel="Notificaciones"
+            accessibilityLabel={
+              unreadCount > 0
+                ? `Notificaciones, ${unreadCount} sin leer`
+                : "Notificaciones"
+            }
             accessibilityRole="button"
             hitSlop={12}
             onPress={onPressNotifications}
             style={styles.bell}
           >
-            <Ionicons
-              color={fecaTheme.colors.onSurface}
-              name="notifications-outline"
-              size={22}
-            />
+            <View style={styles.bellIconWrap}>
+              <Ionicons
+                color={fecaTheme.colors.onSurface}
+                name={unreadCount > 0 ? "notifications" : "notifications-outline"}
+                size={22}
+              />
+              {unreadCount > 0 ? <View style={styles.unreadDot} /> : null}
+            </View>
           </Pressable>
         ) : null}
       </View>
@@ -76,5 +86,20 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: "center",
     width: 40,
+  },
+  bellIconWrap: {
+    alignItems: "center",
+    height: 24,
+    justifyContent: "center",
+    width: 24,
+  },
+  unreadDot: {
+    backgroundColor: fecaTheme.colors.primary,
+    borderRadius: 5,
+    height: 9,
+    position: "absolute",
+    right: -2,
+    top: -2,
+    width: 9,
   },
 });

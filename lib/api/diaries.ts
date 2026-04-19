@@ -20,7 +20,22 @@ type DiaryResponse = {
 
 type CreateDiaryBody = {
   name: string;
-  description: string;
+  description?: string;
+  intro?: string;
+  visibility?: "private" | "unlisted" | "public";
+  coverImageUrl?: string;
+  editorialReason?: string;
+  publishedAt?: string;
+};
+
+export type UpdateDiaryBody = {
+  name?: string;
+  description?: string;
+  intro?: string;
+  editorialReason?: string;
+  coverImageUrl?: string;
+  visibility?: "private" | "unlisted" | "public";
+  publishedAt?: string;
 };
 
 type AddDiaryPlaceBody = {
@@ -32,13 +47,33 @@ export async function createDiaryApi(
   accessToken: string,
   body: CreateDiaryBody,
 ): Promise<ApiDiary> {
+  const payload: Record<string, unknown> = { name: body.name };
+  if (body.description !== undefined) {
+    payload.description = body.description;
+  }
+  if (body.intro !== undefined) {
+    payload.intro = body.intro;
+  }
+  if (body.visibility !== undefined) {
+    payload.visibility = body.visibility;
+  }
+  if (body.coverImageUrl !== undefined) {
+    payload.coverImageUrl = body.coverImageUrl;
+  }
+  if (body.editorialReason !== undefined) {
+    payload.editorialReason = body.editorialReason;
+  }
+  if (body.publishedAt !== undefined) {
+    payload.publishedAt = body.publishedAt;
+  }
+
   const response = await fetch(`${getApiBaseUrl()}/v1/diaries`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
@@ -142,6 +177,31 @@ export async function fetchUserDiaries(
   }
 
   return (await response.json()) as DiariesListResponse;
+}
+
+export async function updateDiaryApi(
+  diaryId: string,
+  accessToken: string,
+  body: UpdateDiaryBody,
+): Promise<ApiDiary> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/v1/diaries/${encodeURIComponent(diaryId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as DiaryResponse;
+  return data.diary;
 }
 
 export async function fetchDiary(

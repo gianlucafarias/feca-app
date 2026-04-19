@@ -4,7 +4,7 @@ import type {
   CreateVisitPayload,
 } from "@/types/api";
 
-import { getApiBaseUrl, parseError } from "./base";
+import { getApiBaseUrl, parseError, rethrowWithNetworkHelp } from "./base";
 
 type ListVisitsResponse = {
   visits?: ApiVisit[];
@@ -25,14 +25,19 @@ export async function createVisitApi(
   accessToken: string,
   payload: CreateVisitPayload,
 ): Promise<ApiVisit> {
-  const response = await fetch(`${getApiBaseUrl()}/v1/visits`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${getApiBaseUrl()}/v1/visits`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    rethrowWithNetworkHelp(e);
+  }
 
   if (!response.ok) {
     throw new Error(await parseError(response));
@@ -77,6 +82,8 @@ export async function fetchFeed(
     cursor?: string;
     lat?: number;
     lng?: number;
+    /** Con mode=city alinea el feed con la ciudad elegida en la app (además del perfil). */
+    cityGooglePlaceId?: string;
   },
 ): Promise<{
   items: ApiFeedItem[];
@@ -90,6 +97,9 @@ export async function fetchFeed(
   if (options?.cursor) params.set("cursor", options.cursor);
   if (options?.lat != null) params.set("lat", String(options.lat));
   if (options?.lng != null) params.set("lng", String(options.lng));
+  if (options?.cityGooglePlaceId) {
+    params.set("cityGooglePlaceId", options.cityGooglePlaceId);
+  }
 
   const qs = params.toString();
   const url = `${getApiBaseUrl()}/v1/feed${qs ? `?${qs}` : ""}`;

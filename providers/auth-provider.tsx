@@ -9,16 +9,19 @@ import {
   type PropsWithChildren,
 } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
+import { fetchMe } from "@/lib/api/me";
 import {
+  deleteMyAccount,
   loginWithGoogleIdToken,
   logoutWithRefreshToken,
+  mergeAuthenticatedUserAfterProfilePatch,
   normalizeAuthenticatedUser,
-  pickDefinedRecord,
   refreshAuthSession,
   updateMyProfile,
 } from "@/lib/auth/api";
+import { logCityChange, summarizeLocationPayload } from "@/lib/debug/city-change-debug";
 import {
-  getOnboardingRouteForUser,
+  getOnboardingRouteForSession,
   type OnboardingRoute,
 } from "@/lib/auth/onboarding-route";
 import {
@@ -30,6 +33,7 @@ import type {
   AuthLoginResult,
   AuthSession,
   AuthenticatedUser,
+  ExtendedOnboardingStep,
   UpdateMyProfileInput,
 } from "@/types/auth";
 
@@ -60,9 +64,15 @@ type AuthContextValue = {
   session: AuthSession | null;
   clearError: () => void;
   completeOnboarding: () => Promise<void>;
+  setExtendedOnboardingStep: (step: ExtendedOnboardingStep) => Promise<void>;
+  finishExtendedOnboarding: () => Promise<void>;
   signInWithGoogle: () => Promise<AuthLoginResult | null>;
   signOut: () => Promise<void>;
   updateProfile: (input: UpdateMyProfileInput) => Promise<AuthSession>;
+  /** GET /v1/me y fusiona usuario en sesión (p. ej. tras PATCH admin editor). */
+  syncMeFromServer: () => Promise<void>;
+  /** DELETE /v1/me y limpia sesión local. */
+  deleteAccount: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -100,7 +110,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     sessionRef.current = nextSession;
     setSession(nextSession);
     setOnboardingRoute(
-      nextSession ? getOnboardingRouteForUser(nextSession.user) : null,
+      nextSession ? getOnboardingRouteForSession(nextSession) : null,
     );
     return nextSession;
   }, []);
@@ -141,13 +151,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
             return currentSession;
           }
 
-          const sessionToPersist =
-            userStateVersionRef.current === startedUserStateVersion
-              ? nextSession
-              : {
-                  ...nextSession,
-                  user: currentSession.user,
-                };
+          /**
+           * Si hubo PATCH de perfil mientras el refresh corría, el user local gana (rama abajo).
+           * Si no, igual fusionamos: /v1/auth/refresh a veces trae un `user` desactualizado y
+           * pisaba ciudad/coords recién guardados en PATCH.
+           */
+          const userAfterRefresh =
+            userStateVersionRef.current !== startedUserStateVersion
+              ? currentSession.user
+              : normalizeAuthenticatedUser({
+                  ...nextSession.user,
+                  ...currentSession.user,
+                });
+
+          const sessionToPersist: AuthSession = {
+            ...nextSession,
+            user: userAfterRefresh,
+            extendedOnboarding: currentSession.extendedOnboarding,
+            pendingExtendedOnboarding: currentSession.pendingExtendedOnboarding,
+          };
 
           return persistSession(sessionToPersist);
         })
@@ -341,14 +363,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       const result = await loginWithGoogleIdToken(idToken);
-      await persistSession(result.session);
+      const sessionToPersist: AuthSession = {
+        ...result.session,
+        ...(result.isNewUser
+          ? {
+              extendedOnboarding: {
+                active: true,
+                step: "preferences",
+              },
+              pendingExtendedOnboarding: { step: "preferences" },
+            }
+          : {}),
+      };
+      await persistSession(sessionToPersist);
       setOnboardingRoute(
         result.isNewUser
           ? "/(onboarding)/username"
-          : getOnboardingRouteForUser(result.session.user),
+          : getOnboardingRouteForSession(sessionToPersist),
       );
 
-      return result;
+      return { ...result, session: sessionToPersist };
     } catch (error) {
       if (isErrorWithCode(error)) {
         switch (error.code) {
@@ -377,6 +411,81 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setOnboardingRoute(null);
   }, []);
 
+  const setExtendedOnboardingStep = useCallback(
+    async (step: ExtendedOnboardingStep) => {
+      const current = sessionRef.current;
+      const allow =
+        current?.extendedOnboarding?.active === true ||
+        Boolean(current?.pendingExtendedOnboarding);
+      if (!current || !allow) {
+        return;
+      }
+      const nextSession: AuthSession = {
+        ...current,
+        extendedOnboarding: { active: true, step },
+        pendingExtendedOnboarding: { step },
+      };
+      await persistSession(nextSession);
+    },
+    [persistSession],
+  );
+
+  const finishExtendedOnboarding = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current) {
+      return;
+    }
+    const nextSession: AuthSession = {
+      ...current,
+      extendedOnboarding: undefined,
+      pendingExtendedOnboarding: undefined,
+    };
+    await persistSession(nextSession);
+  }, [persistSession]);
+
+  const syncMeFromServer = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current?.accessToken) {
+      return;
+    }
+
+    setErrorMessage(null);
+    try {
+      const me = await fetchMe(current.accessToken);
+      const nextUser = normalizeAuthenticatedUser({
+        ...current.user,
+        avatarUrl: me.avatarUrl ?? current.user.avatarUrl,
+        bio: me.bio !== undefined ? me.bio : current.user.bio,
+        city: me.city ?? current.user.city,
+        cityGooglePlaceId: me.cityGooglePlaceId ?? current.user.cityGooglePlaceId,
+        displayName: me.displayName,
+        email: current.user.email,
+        groupInvitePolicy: me.groupInvitePolicy ?? current.user.groupInvitePolicy,
+        id: current.user.id,
+        isAdmin: me.isAdmin ?? current.user.isAdmin,
+        isEditor: me.isEditor ?? current.user.isEditor,
+        lat: me.lat ?? current.user.lat,
+        lng: me.lng ?? current.user.lng,
+        outingPreferences: me.outingPreferences ?? current.user.outingPreferences,
+        username: me.username,
+        visitCount: me.visitCount ?? current.user.visitCount,
+      } as AuthenticatedUser);
+
+      userStateVersionRef.current += 1;
+      const nextSession: AuthSession = {
+        ...current,
+        user: nextUser,
+        extendedOnboarding: current.extendedOnboarding,
+        pendingExtendedOnboarding: current.pendingExtendedOnboarding,
+      };
+      await persistSession(nextSession);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo sincronizar el perfil";
+      setErrorMessage(message);
+    }
+  }, [persistSession]);
+
   const updateProfile = useCallback(
     async (input: UpdateMyProfileInput) => {
       const requestSession = sessionRef.current;
@@ -388,8 +497,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setErrorMessage(null);
 
       try {
+        logCityChange("updateProfile PATCH body", summarizeLocationPayload(input));
         const patchRaw = await updateMyProfile(requestSession.accessToken, input);
-        const patch = pickDefinedRecord(patchRaw);
         const currentSession = sessionRef.current;
 
         if (!currentSession || currentSession.user.id !== requestSession.user.id) {
@@ -397,13 +506,23 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         userStateVersionRef.current += 1;
-        const user = normalizeAuthenticatedUser({
-          ...currentSession.user,
-          ...patch,
-        } as AuthenticatedUser);
+        /**
+         * No llamar GET /v1/me después del PATCH: si el GET devolvía ciudad vieja,
+         * priorizar me.city sobre el merge del PATCH volvía a mostrar la ciudad anterior.
+         */
+        const user = mergeAuthenticatedUserAfterProfilePatch(
+          currentSession.user,
+          patchRaw,
+          input,
+        );
+
+        logCityChange("updateProfile sesión fusionada", summarizeLocationPayload(user));
+
         const nextSession: AuthSession = {
           ...currentSession,
           user,
+          extendedOnboarding: currentSession.extendedOnboarding,
+          pendingExtendedOnboarding: currentSession.pendingExtendedOnboarding,
         };
 
         await persistSession(nextSession);
@@ -440,6 +559,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [clearSessionState]);
 
+  const deleteAccount = useCallback(async () => {
+    const token = sessionRef.current?.accessToken;
+    if (!token) {
+      throw new Error("No active session");
+    }
+    setErrorMessage(null);
+    await deleteMyAccount(token);
+    await signOut();
+  }, [signOut]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       errorMessage,
@@ -451,19 +580,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
       session,
       clearError: () => setErrorMessage(null),
       completeOnboarding,
+      finishExtendedOnboarding,
+      setExtendedOnboardingStep,
       signInWithGoogle,
       signOut,
+      syncMeFromServer,
       updateProfile,
+      deleteAccount,
     }),
     [
       completeOnboarding,
+      finishExtendedOnboarding,
+      deleteAccount,
       errorMessage,
       isHydrating,
       isSigningIn,
       onboardingRoute,
       session,
+      setExtendedOnboardingStep,
       signInWithGoogle,
       signOut,
+      syncMeFromServer,
       updateProfile,
     ],
   );

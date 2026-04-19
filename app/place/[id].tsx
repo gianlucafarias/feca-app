@@ -21,6 +21,7 @@ import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageBackground } from "@/components/ui/page-background";
 import { fetchPlaceDetail, resolveGooglePlace } from "@/lib/api/places";
+import { recordRecentPlaceViewFromDetail } from "@/lib/recent-place-views";
 import { fetchPlaceSaved } from "@/lib/api/saved";
 import { formatRelativeVisitTime } from "@/lib/format";
 import { useAuth } from "@/providers/auth-provider";
@@ -143,6 +144,13 @@ export default function PlaceDetailScreen() {
       void loadPlace();
     }, [loadPlace]),
   );
+
+  useEffect(() => {
+    const gid = typeof id === "string" ? id : id?.[0];
+    if (place?.googlePlaceId && gid && place.googlePlaceId === gid && !error) {
+      void recordRecentPlaceViewFromDetail(place);
+    }
+  }, [place, id, error]);
 
   useEffect(() => {
     if (!place?.googlePlaceId || !accessToken) {

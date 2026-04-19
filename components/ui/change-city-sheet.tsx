@@ -15,11 +15,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useKeyboardBottomInset } from "@/hooks/use-keyboard-bottom-inset";
 import { FormField } from "@/components/ui/form-field";
 import { GradientButton } from "@/components/ui/gradient-button";
 import { TextLinkButton } from "@/components/ui/text-link-button";
 import { useCityLocationPicker } from "@/hooks/use-city-location-picker";
+import { useKeyboardBottomInset } from "@/hooks/use-keyboard-bottom-inset";
+import { logCityChange, summarizeLocationPayload } from "@/lib/debug/city-change-debug";
 import { hasCanonicalCity } from "@/lib/profile/canonical-city";
 import {
   loadRecentCities,
@@ -37,6 +38,12 @@ type ChangeCitySheetProps = {
   initialCity: string;
   initialLat?: number;
   initialLng?: number;
+  /** Tras PATCH exitoso: actualización optimista del inicio (texto de ciudad) antes de que React vea la sesión nueva. */
+  onCitySaved?: (p: {
+    city: string;
+    cityGooglePlaceId: string;
+    displayName: string;
+  }) => void;
 };
 
 export function ChangeCitySheet({
@@ -46,6 +53,7 @@ export function ChangeCitySheet({
   initialCity,
   initialLat,
   initialLng,
+  onCitySaved,
 }: ChangeCitySheetProps) {
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
@@ -80,6 +88,8 @@ export function ChangeCitySheet({
     initialLat,
     initialLng,
     resetKey: visible ? resetKey : null,
+    /** Búsqueda global: el sesgo por perfil/simulador prioriza homónimos locales (p. ej. “Barcelona”). */
+    locationBiasInAutocomplete: false,
   });
 
   useEffect(() => {
@@ -98,14 +108,27 @@ export function ChangeCitySheet({
     setSubmitError(null);
 
     void resolveCoordinates()
-      .then(({ city, cityGooglePlaceId, displayName, lat, lng }) =>
-        updateProfile({
+      .then(({ city, cityGooglePlaceId, displayName, lat, lng }) => {
+        logCityChange("ChangeCitySheet → PATCH /v1/me", summarizeLocationPayload({
           city,
           cityGooglePlaceId,
           lat,
           lng,
-        }).then(() => ({ city, cityGooglePlaceId, displayName, lat, lng })),
-      )
+        }));
+        return updateProfile({
+          city,
+          cityGooglePlaceId,
+          lat,
+          lng,
+        }).then(() => {
+          onCitySaved?.({
+            city,
+            cityGooglePlaceId,
+            displayName: displayName.trim() || city.trim(),
+          });
+          return { city, cityGooglePlaceId, displayName, lat, lng };
+        });
+      })
       .then(({ city, cityGooglePlaceId, displayName, lat, lng }) =>
         rememberCity({
           label: displayName,
@@ -130,6 +153,7 @@ export function ChangeCitySheet({
         setIsSaving(false);
       });
   }, [
+    onCitySaved,
     onClose,
     resolveCoordinates,
     session?.accessToken,
@@ -237,7 +261,7 @@ export function ChangeCitySheet({
 
               {cityApiEnabled ? (
                 <Text style={styles.hint}>
-                  Escribí para ver sugerencias (FECA).
+                  Escribí la ciudad donde te encontrás
                 </Text>
               ) : (
                 <Text style={styles.hintMuted}>
@@ -322,11 +346,7 @@ export function ChangeCitySheet({
                 }}
               />
 
-              {resolvedCityLabel ? (
-                <Text style={styles.selectedHint}>
-                  Ciudad seleccionada: {resolvedCityLabel}
-                </Text>
-              ) : null}
+             
             </ScrollView>
 
             <View

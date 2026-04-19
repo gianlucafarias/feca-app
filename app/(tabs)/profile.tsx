@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -21,6 +22,7 @@ import { RatingDistributionBars } from "@/components/profile/rating-distribution
 import { PageBackground } from "@/components/ui/page-background";
 import { paddingBottomWithFloatingTabBar } from "@/components/ui/screen-padding";
 import { TabScreenHeader } from "@/components/ui/tab-screen-header";
+import { patchMyEditor } from "@/lib/api/me-editor";
 import { fetchMyDiaries } from "@/lib/api/diaries";
 import { fetchMyFriends } from "@/lib/api/friends";
 import { fetchMe } from "@/lib/api/me";
@@ -30,6 +32,7 @@ import { mapApiDiaryToCafeDiary } from "@/lib/feca/map-api-social";
 import { buildRatingBuckets } from "@/lib/visits/rating-buckets";
 import { mapApiVisitToVisit } from "@/lib/visits/map-api-visit";
 import { useAuth } from "@/providers/auth-provider";
+import { useUnreadNotifications } from "@/providers/unread-notifications-provider";
 import { fecaTheme } from "@/theme/feca";
 import type { ApiMeUser } from "@/types/api";
 import type { CafeDiary, Place, Visit } from "@/types/feca";
@@ -47,8 +50,10 @@ function openPlaceFromSummary(place: Place) {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { session, signOut } = useAuth();
+  const { session, signOut, syncMeFromServer } = useAuth();
+  const { unreadCount } = useUnreadNotifications();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [editorToggleBusy, setEditorToggleBusy] = useState(false);
 
   const [meUser, setMeUser] = useState<ApiMeUser | null>(null);
   const [apiVisits, setApiVisits] = useState<Visit[]>([]);
@@ -232,6 +237,7 @@ export default function ProfileScreen() {
         <TabScreenHeader
           showNotifications={Boolean(session?.accessToken)}
           onPressNotifications={() => router.push("/notifications")}
+          unreadCount={unreadCount}
         />
         <View style={styles.hero}>
           <AvatarBadge
@@ -251,6 +257,78 @@ export default function ProfileScreen() {
             </Text>
           ) : null}
         </View>
+
+        {session?.accessToken ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/profile/edit")}
+            style={({ pressed }) => [
+              styles.editProfileRow,
+              pressed && styles.editProfileRowPressed,
+            ]}
+          >
+            <View style={styles.editProfileRowLeft}>
+              <Ionicons
+                color={fecaTheme.colors.primary}
+                name="create-outline"
+                size={22}
+              />
+              <View>
+                <Text style={styles.editProfileTitle}>Editar perfil</Text>
+                <Text style={styles.editProfileMeta}>
+                  Email, ciudad, invitaciones a planes, preferencias y más
+                </Text>
+              </View>
+            </View>
+            <Ionicons
+              color={fecaTheme.colors.muted}
+              name="chevron-forward"
+              size={20}
+            />
+          </Pressable>
+        ) : null}
+
+        {session?.accessToken ? (
+          <View style={styles.editorPreviewCard}>
+            <View style={styles.editorPreviewTextCol}>
+              <Text style={styles.editorPreviewTitle}>Soy editor (preview)</Text>
+              <Text style={styles.editorPreviewMeta}>
+                Activá esto para probar el carrusel de guías en inicio. Luego lo
+                limitaremos con permisos de admin.
+              </Text>
+            </View>
+            <Switch
+              disabled={editorToggleBusy}
+              ios_backgroundColor={fecaTheme.surfaces.container}
+              onValueChange={(next) => {
+                void (async () => {
+                  if (!session?.accessToken) {
+                    return;
+                  }
+                  setEditorToggleBusy(true);
+                  try {
+                    await patchMyEditor(session.accessToken, next);
+                    await syncMeFromServer();
+                    await loadProfile();
+                  } catch {
+                    Alert.alert(
+                      "No se pudo actualizar",
+                      "Reintentá o comprobá tu conexión con el servidor.",
+                    );
+                  } finally {
+                    setEditorToggleBusy(false);
+                  }
+                })();
+              }}
+              thumbColor={fecaTheme.surfaces.lowest}
+              trackColor={{
+                false: fecaTheme.colors.outlineVariantBase,
+                true: fecaTheme.colors.primary,
+              }}
+              value={Boolean(session.user.isEditor ?? meUser?.isEditor)}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.wrappedSection}>
           <Text style={styles.wrappedSectionLabel}>Resumen</Text>
@@ -322,7 +400,7 @@ export default function ProfileScreen() {
 
         {session?.accessToken ? (
           <Pressable
-            onPress={() => router.push("/taste" as Href)}
+            onPress={() => router.push("/outing-preferences" as Href)}
             style={({ pressed }) => [
               styles.tasteRow,
               pressed && styles.tasteRowPressed,
@@ -331,13 +409,13 @@ export default function ProfileScreen() {
             <View style={styles.tasteRowLeft}>
               <Ionicons
                 color={fecaTheme.colors.primary}
-                name="color-filter-outline"
+                name="sparkles-outline"
                 size={22}
               />
               <View>
-                <Text style={styles.tasteRowTitle}>Tu gusto</Text>
+                <Text style={styles.tasteRowTitle}>Preferencias para recomendaciones</Text>
                 <Text style={styles.tasteRowMeta}>
-                  Preferencias que explican tus elecciones
+                  Cuándo salís, con quién y qué priorizás — no es público
                 </Text>
               </View>
             </View>
@@ -484,6 +562,35 @@ const styles = StyleSheet.create({
     marginTop: fecaTheme.spacing.sm,
     textAlign: "center",
   },
+  editProfileRow: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: fecaTheme.surfaces.low,
+    borderRadius: fecaTheme.radii.lg,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: fecaTheme.spacing.lg,
+    paddingHorizontal: fecaTheme.spacing.lg,
+    paddingVertical: fecaTheme.spacing.md,
+  },
+  editProfileRowPressed: {
+    opacity: 0.92,
+  },
+  editProfileRowLeft: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: fecaTheme.spacing.md,
+    flexShrink: 1,
+  },
+  editProfileTitle: {
+    ...fecaTheme.typography.bodyStrong,
+    color: fecaTheme.colors.onSurface,
+  },
+  editProfileMeta: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.muted,
+    marginTop: 2,
+  },
   wrappedSection: {
     alignSelf: "stretch",
     gap: fecaTheme.spacing.sm,
@@ -561,6 +668,35 @@ const styles = StyleSheet.create({
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.muted,
     marginTop: 2,
+  },
+  editorPreviewCard: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: fecaTheme.surfaces.high,
+    borderColor: fecaTheme.colors.outlineVariant,
+    borderRadius: fecaTheme.radii.lg,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: fecaTheme.spacing.md,
+    marginBottom: fecaTheme.spacing.lg,
+    paddingHorizontal: fecaTheme.spacing.lg,
+    paddingVertical: fecaTheme.spacing.md,
+  },
+  editorPreviewTextCol: {
+    flex: 1,
+    flexShrink: 1,
+    gap: 4,
+  },
+  editorPreviewTitle: {
+    ...fecaTheme.typography.bodyStrong,
+    color: fecaTheme.colors.onSurface,
+    fontSize: 15,
+  },
+  editorPreviewMeta: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
   },
   section: {
     gap: fecaTheme.spacing.lg,

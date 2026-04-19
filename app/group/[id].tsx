@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,8 +26,17 @@ import { GradientButton } from "@/components/ui/gradient-button";
 import { PageBackground } from "@/components/ui/page-background";
 import { SaveToListSheet } from "@/components/ui/save-to-list-sheet";
 import { TextLinkButton } from "@/components/ui/text-link-button";
+import { ApiRequestError } from "@/lib/api/base";
 import { fetchMyFriends } from "@/lib/api/friends";
-import { addGroupEventApi, addGroupMembers, fetchGroup } from "@/lib/api/groups";
+import {
+  addGroupEventApi,
+  addGroupMembers,
+  fetchGroup,
+  leaveGroup,
+  setGroupEventRsvp,
+  updateGroup,
+} from "@/lib/api/groups";
+import { fetchNearbyPlaces } from "@/lib/api/places";
 import { fetchMySavedPlaces } from "@/lib/api/saved";
 import { fetchMyVisits } from "@/lib/api/visits";
 import {
@@ -36,15 +45,21 @@ import {
 } from "@/lib/feca/map-api-social";
 import { formatVisitDate } from "@/lib/format";
 import { mapApiVisitToVisit } from "@/lib/visits/map-api-visit";
+import { mapNearbyPlaceToPlace } from "@/lib/feca/map-api-place";
 import { mapApiUserPublicToUser } from "@/lib/feca/map-api-user";
+import { filterUsersBySearchQuery } from "@/lib/feca/user-search-query";
 import { useKeyboardBottomInset } from "@/hooks/use-keyboard-bottom-inset";
 import { useAuth } from "@/providers/auth-provider";
 import { fecaTheme } from "@/theme/feca";
 import type {
+  EventRsvp,
   FecaGroup,
   GroupEvent,
   GroupEventStatus,
+  GroupVisibility,
+  MemberProposalInteraction,
   Place,
+  PlaceProposalPolicy,
   SavedPlace,
   User,
   Visit,
@@ -69,6 +84,8 @@ const EVENT_LABEL: Record<GroupEventStatus, string> = {
 };
 
 type ProposeStep = "place" | "date";
+
+const PROPOSE_PLACE_DEBOUNCE_MS = 300;
 
 const DATE_OPTIONS = (() => {
   const options: { label: string; value: string }[] = [];
@@ -114,16 +131,63 @@ export default function GroupDetailScreen() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [saveGroupSheetOpen, setSaveGroupSheetOpen] = useState(false);
 
+  const [editPlanVisible, setEditPlanVisible] = useState(false);
+  const [editPlanBusy, setEditPlanBusy] = useState(false);
+  const [editPlanName, setEditPlanName] = useState("");
+  const [editVisibility, setEditVisibility] = useState<GroupVisibility>("private");
+  const [editProposalPolicy, setEditProposalPolicy] =
+    useState<PlaceProposalPolicy>("all_members");
+  const [editMemberInteraction, setEditMemberInteraction] =
+    useState<MemberProposalInteraction>("collaborative");
+
   const [proposeVisible, setProposeVisible] = useState(false);
   const [proposeStep, setProposeStep] = useState<ProposeStep>("place");
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [placeSearch, setPlaceSearch] = useState("");
   const [placeTab, setPlaceTab] = useState<"recent" | "saved">("recent");
-  const deferredSearch = useDeferredValue(placeSearch);
-  const isSearching = deferredSearch.trim().length > 0;
+  const [remoteSearchPlaces, setRemoteSearchPlaces] = useState<Place[]>([]);
+  const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
+  const [remoteSearchError, setRemoteSearchError] = useState<string | null>(null);
+  const placeSearchRef = useRef(placeSearch);
+  const proposePlaceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  placeSearchRef.current = placeSearch;
+  const placeSearchTrimmed = placeSearch.trim();
+  const isPlaceSearchActive = placeSearchTrimmed.length > 0;
 
   const currentUserId = session?.user.id;
+
+  const isActiveMember = useMemo(() => {
+    if (!apiGroup || !currentUserId) return false;
+    if (apiGroup.viewerMembership === "none") return false;
+    return apiGroup.members.some(
+      (m) => m.user.id === currentUserId && m.accepted !== false,
+    );
+  }, [apiGroup, currentUserId]);
+
+  const isPlanOwner = useMemo(
+    () =>
+      Boolean(
+        currentUserId &&
+          apiGroup &&
+          apiGroup.viewerMembership !== "none" &&
+          apiGroup.createdBy.id === currentUserId,
+      ),
+    [apiGroup, currentUserId],
+  );
+
+  const canProposePlace = useMemo(() => {
+    if (!apiGroup || !currentUserId) return false;
+    if (apiGroup.viewerMembership === "none") return false;
+    if (apiGroup.placeProposalPolicy === "owner_only") {
+      return apiGroup.createdBy.id === currentUserId;
+    }
+    return true;
+  }, [apiGroup, currentUserId]);
+
+  const cityGooglePlaceId = session?.user.cityGooglePlaceId;
+  const userLat = session?.user.lat;
+  const userLng = session?.user.lng;
 
   useEffect(() => {
     if (!id || !accessToken) {
@@ -138,22 +202,43 @@ export default function GroupDetailScreen() {
       .finally(() => setGroupLoading(false));
   }, [accessToken, id]);
 
-  const loadFriends = useCallback(async () => {
-    if (!accessToken) {
-      setFriends([]);
-      return;
-    }
-    try {
-      const res = await fetchMyFriends(accessToken, { limit: 100 });
-      setFriends(res.friends.map(mapApiUserPublicToUser));
-    } catch {
-      setFriends([]);
-    }
-  }, [accessToken]);
+  const loadFriends = useCallback(
+    async (serverQuery?: string) => {
+      if (!accessToken) {
+        setFriends([]);
+        return;
+      }
+      try {
+        const res = await fetchMyFriends(accessToken, {
+          limit: 50,
+          ...(serverQuery && serverQuery.length >= 2
+            ? { q: serverQuery }
+            : {}),
+        });
+        setFriends(res.friends.map(mapApiUserPublicToUser));
+      } catch {
+        setFriends([]);
+      }
+    },
+    [accessToken],
+  );
 
   useEffect(() => {
-    void loadFriends();
-  }, [loadFriends]);
+    if (!accessToken || !inviteVisible) {
+      return;
+    }
+    const raw = inviteSearch.trim();
+    if (raw.length >= 2) {
+      const t = setTimeout(() => {
+        void loadFriends(raw);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => {
+      void loadFriends(undefined);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [accessToken, inviteVisible, inviteSearch, loadFriends]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -195,20 +280,156 @@ export default function GroupDetailScreen() {
     [savedPlaces],
   );
 
-  const searchResults = useMemo(() => {
-    if (!isSearching) return [];
-    const q = deferredSearch.toLowerCase();
+  const localPlaceTypeahead = useMemo(() => {
+    const q = placeSearchTrimmed.toLowerCase();
+    if (!q) return [];
     const seen = new Set<string>();
     const result: Place[] = [];
-    const all = [...savedPlacesList, ...recentPlaces];
-    for (const p of all) {
-      if (!seen.has(p.id) && (p.name.toLowerCase().includes(q) || p.neighborhood.toLowerCase().includes(q))) {
-        seen.add(p.id);
+    for (const p of [...savedPlacesList, ...recentPlaces]) {
+      const key = p.googlePlaceId ?? p.id;
+      if (seen.has(key)) continue;
+      if (
+        p.name.toLowerCase().includes(q) ||
+        p.neighborhood.toLowerCase().includes(q)
+      ) {
+        seen.add(key);
         result.push(p);
       }
     }
     return result;
-  }, [deferredSearch, isSearching, recentPlaces, savedPlacesList]);
+  }, [placeSearchTrimmed, recentPlaces, savedPlacesList]);
+
+  const proposePlaceListData = useMemo(() => {
+    if (!isPlaceSearchActive) {
+      return placeTab === "recent" ? recentPlaces : savedPlacesList;
+    }
+    if (placeSearchTrimmed.length < 2) {
+      return localPlaceTypeahead;
+    }
+    const seen = new Set<string>();
+    const out: Place[] = [];
+    for (const p of remoteSearchPlaces) {
+      const k = p.googlePlaceId ?? p.id;
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(p);
+      }
+    }
+    for (const p of localPlaceTypeahead) {
+      const k = p.googlePlaceId ?? p.id;
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(p);
+      }
+    }
+    return out;
+  }, [
+    isPlaceSearchActive,
+    placeSearchTrimmed,
+    placeTab,
+    recentPlaces,
+    savedPlacesList,
+    remoteSearchPlaces,
+    localPlaceTypeahead,
+  ]);
+
+  useEffect(() => {
+    if (!proposeVisible || proposeStep !== "place" || !accessToken) {
+      return;
+    }
+
+    const clearDebounce = () => {
+      if (proposePlaceDebounceRef.current) {
+        clearTimeout(proposePlaceDebounceRef.current);
+        proposePlaceDebounceRef.current = null;
+      }
+    };
+
+    const latest = placeSearchRef.current.trim();
+    if (!latest) {
+      clearDebounce();
+      setRemoteSearchPlaces([]);
+      setRemoteSearchError(null);
+      setRemoteSearchLoading(false);
+      return;
+    }
+
+    const hasAnchor =
+      (userLat != null &&
+        userLng != null &&
+        Number.isFinite(userLat) &&
+        Number.isFinite(userLng)) ||
+      Boolean(cityGooglePlaceId?.trim());
+
+    if (!hasAnchor) {
+      clearDebounce();
+      setRemoteSearchPlaces([]);
+      setRemoteSearchLoading(false);
+      setRemoteSearchError(
+        "Configurá tu ciudad en el perfil o activá la ubicación para buscar lugares.",
+      );
+      return;
+    }
+
+    if (latest.length < 2) {
+      clearDebounce();
+      setRemoteSearchPlaces([]);
+      setRemoteSearchLoading(false);
+      setRemoteSearchError(null);
+      return;
+    }
+
+    setRemoteSearchError(null);
+    setRemoteSearchLoading(true);
+    clearDebounce();
+    proposePlaceDebounceRef.current = setTimeout(() => {
+      const q = placeSearchRef.current.trim();
+      if (q.length < 2) {
+        setRemoteSearchLoading(false);
+        return;
+      }
+      void (async () => {
+        try {
+          const results = await fetchNearbyPlaces({
+            accessToken,
+            lat: userLat ?? undefined,
+            lng: userLng ?? undefined,
+            query: q,
+            limit: 20,
+          });
+          if (placeSearchRef.current.trim() !== q) {
+            return;
+          }
+          setRemoteSearchPlaces(results.map(mapNearbyPlaceToPlace));
+          setRemoteSearchError(null);
+        } catch (err) {
+          if (placeSearchRef.current.trim() !== q) {
+            return;
+          }
+          setRemoteSearchPlaces([]);
+          setRemoteSearchError(
+            err instanceof Error ? err.message : "No se pudieron cargar los lugares",
+          );
+        } finally {
+          if (placeSearchRef.current.trim() === q) {
+            setRemoteSearchLoading(false);
+          }
+        }
+      })();
+    }, PROPOSE_PLACE_DEBOUNCE_MS);
+
+    return () => {
+      clearDebounce();
+    };
+  }, [
+    accessToken,
+    proposeVisible,
+    proposeStep,
+    placeSearch,
+    cityGooglePlaceId,
+    userLat,
+    userLng,
+  ]);
 
   const openPropose = () => {
     setProposeStep("place");
@@ -216,6 +437,9 @@ export default function GroupDetailScreen() {
     setSelectedDate(null);
     setPlaceSearch("");
     setPlaceTab("recent");
+    setRemoteSearchPlaces([]);
+    setRemoteSearchError(null);
+    setRemoteSearchLoading(false);
     setProposeVisible(true);
   };
 
@@ -236,28 +460,30 @@ export default function GroupDetailScreen() {
   }, [accessToken, id]);
 
   const memberIdSet = useMemo(
-    () => new Set(apiGroup?.members.map((m) => m.user.id) ?? []),
+    () =>
+      new Set(
+        (apiGroup?.members ?? []).map((m) => String(m.user.id).trim()),
+      ),
     [apiGroup?.members],
   );
 
   const friendsNotInGroup = useMemo(
-    () => friends.filter((f) => !memberIdSet.has(f.id)),
+    () => friends.filter((f) => !memberIdSet.has(String(f.id).trim())),
     [friends, memberIdSet],
   );
 
   const deferredInviteSearch = useDeferredValue(inviteSearch);
   const filteredInviteFriends = useMemo(() => {
-    const q = deferredInviteSearch.trim().toLowerCase();
-    if (!q) return friendsNotInGroup;
-    return friendsNotInGroup.filter((f) =>
-      `${f.displayName} ${f.username}`.toLowerCase().includes(q),
-    );
+    const raw = deferredInviteSearch.trim();
+    if (raw.length >= 2) {
+      return friendsNotInGroup;
+    }
+    return filterUsersBySearchQuery(friendsNotInGroup, raw);
   }, [deferredInviteSearch, friendsNotInGroup]);
 
   const openInviteFriends = () => {
     setInviteSearch("");
     setInviteSelection([]);
-    void loadFriends();
     setInviteVisible(true);
   };
 
@@ -281,11 +507,94 @@ export default function GroupDetailScreen() {
         setInviteVisible(false);
         setInviteSelection([]);
       } catch (err) {
-        const message =
+        let message =
           err instanceof Error ? err.message : "No se pudo completar la invitación";
+        if (
+          ApiRequestError.is(err) &&
+          err.code === "INVITE_NOT_ALLOWED_BY_TARGET_POLICY"
+        ) {
+          message =
+            "Esta persona solo acepta invitaciones de usuarios que sigue. Si no te sigue, no va a poder unirse por esta vía.";
+        }
         Alert.alert("No se pudo invitar", message);
       } finally {
         setInviteBusy(false);
+      }
+    })();
+  };
+
+  const openEditPlan = useCallback(() => {
+    if (!apiGroup) return;
+    setEditPlanName(apiGroup.name);
+    setEditVisibility(apiGroup.visibility);
+    setEditProposalPolicy(apiGroup.placeProposalPolicy);
+    setEditMemberInteraction(apiGroup.memberProposalInteraction);
+    setEditPlanVisible(true);
+  }, [apiGroup]);
+
+  const handleSaveEditPlan = () => {
+    if (!id || !accessToken) return;
+    const name = editPlanName.trim();
+    if (!name) {
+      Alert.alert("Nombre", "El plan necesita un nombre.");
+      return;
+    }
+    setEditPlanBusy(true);
+    void (async () => {
+      try {
+        const g = await updateGroup(id, accessToken, {
+          name,
+          visibility: editVisibility,
+          placeProposalPolicy: editProposalPolicy,
+          memberProposalInteraction: editMemberInteraction,
+        });
+        setApiGroup(mapApiGroupToFecaGroup(g));
+        setEditPlanVisible(false);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "No se pudo guardar el plan";
+        Alert.alert("Error", message);
+      } finally {
+        setEditPlanBusy(false);
+      }
+    })();
+  };
+
+  const handleLeavePlan = () => {
+    if (!id || !accessToken) return;
+    Alert.alert(
+      "Salir del plan",
+      "No vas a recibir más avisos de este plan. Podés volver a unirte con el código si te invitan de nuevo.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Salir",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                await leaveGroup(id, accessToken);
+                router.back();
+              } catch (err) {
+                const message =
+                  err instanceof Error ? err.message : "No se pudo salir del plan";
+                Alert.alert("Error", message);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleEventRsvp = (eventId: string, rsvp: EventRsvp) => {
+    if (!id || !accessToken) return;
+    void (async () => {
+      try {
+        const g = await setGroupEventRsvp(id, eventId, accessToken, { rsvp });
+        setApiGroup(mapApiGroupToFecaGroup(g));
+      } catch {
+        /* noop */
       }
     })();
   };
@@ -295,9 +604,14 @@ export default function GroupDetailScreen() {
 
     void (async () => {
       try {
+        const isGoogleOnlyId =
+          Boolean(selectedPlace.googlePlaceId) &&
+          selectedPlace.id === selectedPlace.googlePlaceId;
         await addGroupEventApi(id, accessToken, {
-          placeId: selectedPlace.id,
-          googlePlaceId: selectedPlace.googlePlaceId,
+          ...(isGoogleOnlyId ? {} : { placeId: selectedPlace.id }),
+          ...(selectedPlace.googlePlaceId
+            ? { googlePlaceId: selectedPlace.googlePlaceId }
+            : {}),
           date: selectedDate,
         });
         await reloadGroup();
@@ -344,7 +658,14 @@ export default function GroupDetailScreen() {
     );
   }
 
-  const inviteCode = group.inviteCode?.trim() ?? null;
+  const isPublicPeek = group.viewerMembership === "none";
+  const memberRollupCount =
+    group.members.length > 0
+      ? group.members.length
+      : (group.memberCount ?? 0);
+
+  const inviteCode =
+    isPublicPeek ? null : (group.inviteCode?.trim() ?? null);
   const inviteLink = inviteCode ? `https://feca.app/g/${inviteCode}` : null;
 
   const upcoming = group.events.filter((e) => e.status !== "completed");
@@ -365,6 +686,7 @@ export default function GroupDetailScreen() {
   const renderEventCard = (event: GroupEvent) => {
     const isExpanded = expandedId === event.id;
     const isCompleted = event.status === "completed";
+    const isPublicPeekVisitor = group.viewerMembership === "none";
 
     return (
       <View key={event.id} style={styles.eventCardOuter}>
@@ -421,6 +743,42 @@ export default function GroupDetailScreen() {
                 </Text>
               </Pressable>
             ) : null}
+
+            {!isPublicPeekVisitor &&
+            !isCompleted &&
+            event.status === "proposed" &&
+            event.allowsRsvp ? (
+              <View style={styles.rsvpBlock}>
+                <Text style={styles.rsvpTitle}>¿Vas?</Text>
+                <View style={styles.rsvpChips}>
+                  {(
+                    [
+                      { rsvp: "going" as const, label: "Voy" },
+                      { rsvp: "maybe" as const, label: "Tal vez" },
+                      { rsvp: "declined" as const, label: "No puedo" },
+                    ] as const
+                  ).map(({ rsvp, label }) => {
+                    const active = event.myRsvp === rsvp;
+                    return (
+                      <Pressable
+                        key={rsvp}
+                        onPress={() => handleEventRsvp(event.id, rsvp)}
+                        style={[styles.rsvpChip, active && styles.rsvpChipActive]}
+                      >
+                        <Text
+                          style={[
+                            styles.rsvpChipText,
+                            active && styles.rsvpChipTextActive,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -439,16 +797,24 @@ export default function GroupDetailScreen() {
             <Ionicons color={fecaTheme.colors.onSurface} name="chevron-back" size={20} />
           </Pressable>
           <View style={styles.topBarRight}>
-            <Pressable
-              accessibilityLabel="Guardar plan en lista"
-              onPress={() => setSaveGroupSheetOpen(true)}
-              style={styles.navBtn}
-            >
-              <Ionicons color={fecaTheme.colors.onSurface} name="bookmark-outline" size={20} />
-            </Pressable>
-            <Pressable onPress={() => setShareVisible(true)} style={styles.navBtn}>
-              <Ionicons color={fecaTheme.colors.onSurface} name="share-outline" size={18} />
-            </Pressable>
+            {!isPublicPeek ? (
+              <>
+                <Pressable
+                  accessibilityLabel="Guardar plan en lista"
+                  onPress={() => setSaveGroupSheetOpen(true)}
+                  style={styles.navBtn}
+                >
+                  <Ionicons
+                    color={fecaTheme.colors.onSurface}
+                    name="bookmark-outline"
+                    size={20}
+                  />
+                </Pressable>
+                <Pressable onPress={() => setShareVisible(true)} style={styles.navBtn}>
+                  <Ionicons color={fecaTheme.colors.onSurface} name="share-outline" size={18} />
+                </Pressable>
+              </>
+            ) : null}
           </View>
         </View>
 
@@ -460,15 +826,60 @@ export default function GroupDetailScreen() {
               ? "vos"
               : group.createdBy.displayName}
           </Text>
+          <View style={styles.planActionsRow}>
+            {isPlanOwner ? (
+              <Pressable
+                accessibilityLabel="Editar plan"
+                accessibilityRole="button"
+                onPress={openEditPlan}
+                style={styles.planActionBtn}
+              >
+                <Ionicons
+                  color={fecaTheme.colors.primary}
+                  name="create-outline"
+                  size={16}
+                />
+                <Text style={styles.planActionLabel}>Editar plan</Text>
+              </Pressable>
+            ) : null}
+            {isActiveMember && !isPlanOwner ? (
+              <Pressable
+                accessibilityLabel="Salir del plan"
+                accessibilityRole="button"
+                onPress={handleLeavePlan}
+                style={styles.planActionBtnDanger}
+              >
+                <Ionicons
+                  color={fecaTheme.colors.secondaryDim}
+                  name="exit-outline"
+                  size={16}
+                />
+                <Text style={styles.planActionLabelDanger}>Salir del plan</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {isPublicPeek ? (
+            <View style={styles.publicPeekBanner}>
+              <Ionicons
+                color={fecaTheme.colors.primary}
+                name="eye-outline"
+                size={18}
+              />
+              <Text style={styles.publicPeekBannerText}>
+                Estás viendo un resumen público. Para unirte necesitás una
+                invitación o el código del plan desde quien lo organiza.
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* --- Miembros --- */}
         <View style={styles.section}>
           <View style={styles.membersHeaderRow}>
             <Text style={[styles.sectionTitle, styles.membersRowTitle]}>
-              Miembros ({group.members.length})
+              Miembros ({memberRollupCount})
             </Text>
-            {group.createdBy.id === currentUserId ? (
+            {isPlanOwner ? (
               <Pressable
                 accessibilityLabel="Invitar amigos al plan"
                 accessibilityRole="button"
@@ -485,42 +896,52 @@ export default function GroupDetailScreen() {
             ) : null}
           </View>
           <Text style={styles.membersHint}>
-            Podés sumar gente desde acá o compartiendo el código del plan (icono
-            compartir arriba).
+            {isPublicPeek
+              ? "En la vista pública no mostramos la lista de personas por privacidad."
+              : "Podés sumar gente desde acá o compartiendo el código del plan (icono compartir arriba)."}
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.membersScroll}
-          >
-            {group.members.map((member) => (
-              <View key={member.user.id} style={styles.memberItem}>
-                <AvatarBadge
-                  accent={
-                    member.user.id === currentUserId
-                      ? fecaTheme.colors.secondary
-                      : fecaTheme.colors.primary
-                  }
-                  name={member.user.displayName}
-                  size={44}
-                />
-                <Text numberOfLines={1} style={styles.memberName}>
-                  {member.user.id === currentUserId
-                    ? "Vos"
-                    : member.user.displayName}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
+          {group.members.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.membersScroll}
+            >
+              {group.members.map((member) => (
+                <View key={member.user.id} style={styles.memberItem}>
+                  <AvatarBadge
+                    accent={
+                      member.user.id === currentUserId
+                        ? fecaTheme.colors.secondary
+                        : fecaTheme.colors.primary
+                    }
+                    name={member.user.displayName}
+                    size={44}
+                  />
+                  <Text numberOfLines={1} style={styles.memberName}>
+                    {member.user.id === currentUserId
+                      ? "Vos"
+                      : member.user.displayName}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          ) : isPublicPeek && memberRollupCount > 0 ? (
+            <Text style={styles.publicPeekMembersMeta}>
+              Hay {memberRollupCount}{" "}
+              {memberRollupCount === 1 ? "persona" : "personas"} en este plan.
+            </Text>
+          ) : null}
         </View>
 
         {/* --- Próximos cafés --- */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>Próximos planes</Text>
-            <Pressable onPress={openPropose} style={styles.addBtnSmall}>
-              <Ionicons color={fecaTheme.colors.onPrimary} name="add" size={18} />
-            </Pressable>
+            {canProposePlace ? (
+              <Pressable onPress={openPropose} style={styles.addBtnSmall}>
+                <Ionicons color={fecaTheme.colors.onPrimary} name="add" size={18} />
+              </Pressable>
+            ) : null}
           </View>
           {upcoming.length > 0 ? (
             <View style={styles.eventList}>
@@ -528,7 +949,11 @@ export default function GroupDetailScreen() {
             </View>
           ) : (
             <EmptyState
-              description="Tocá + para proponer un lugar y una fecha."
+              description={
+                canProposePlace
+                  ? "Tocá + para proponer un lugar y una fecha."
+                  : "Solo quien creó el plan puede proponer salidas."
+              }
               icon="cafe-outline"
               title="Sin planes todavía"
             />
@@ -600,7 +1025,7 @@ export default function GroupDetailScreen() {
                   <Ionicons color={fecaTheme.colors.muted} name="search" size={16} />
                   <TextInput
                     onChangeText={setPlaceSearch}
-                    placeholder="Buscar café..."
+                    placeholder="Buscar cafés y lugares…"
                     placeholderTextColor={fecaTheme.colors.muted}
                     style={styles.searchInput}
                     value={placeSearch}
@@ -612,7 +1037,11 @@ export default function GroupDetailScreen() {
                   ) : null}
                 </View>
 
-                {!isSearching ? (
+                {isPlaceSearchActive && remoteSearchError ? (
+                  <Text style={styles.proposeSearchHint}>{remoteSearchError}</Text>
+                ) : null}
+
+                {!isPlaceSearchActive ? (
                   <View style={styles.tabChips}>
                     <Pressable
                       onPress={() => setPlaceTab("recent")}
@@ -650,14 +1079,35 @@ export default function GroupDetailScreen() {
                       ? { paddingBottom: keyboardInset + fecaTheme.spacing.md }
                       : null,
                   ]}
-                  data={isSearching ? searchResults : placeTab === "recent" ? recentPlaces : savedPlacesList}
-                  keyExtractor={(p) => p.id}
+                  data={proposePlaceListData}
+                  keyExtractor={(p) => p.googlePlaceId ?? p.id}
                   keyboardDismissMode="on-drag"
                   keyboardShouldPersistTaps="handled"
                   ListEmptyComponent={
-                    <Text style={styles.emptyText}>
-                      {isSearching ? "Sin resultados" : placeTab === "recent" ? "Todavía no visitaste cafés" : "No tenés lugares guardados"}
-                    </Text>
+                    proposePlaceListData.length === 0 ? (
+                      <Text style={styles.emptyText}>
+                        {isPlaceSearchActive
+                          ? placeSearchTrimmed.length >= 2 && remoteSearchLoading
+                            ? "Buscando…"
+                            : placeSearchTrimmed.length >= 2
+                              ? "Sin resultados"
+                              : localPlaceTypeahead.length === 0
+                                ? "Sin coincidencias en visitados ni guardados. Escribí 2+ letras para buscar en el mapa."
+                                : ""
+                          : placeTab === "recent"
+                            ? "Todavía no visitaste cafés"
+                            : "No tenés lugares guardados"}
+                      </Text>
+                    ) : null
+                  }
+                  ListHeaderComponent={
+                    isPlaceSearchActive &&
+                    placeSearchTrimmed.length >= 2 &&
+                    remoteSearchLoading ? (
+                      <View style={styles.proposeSearchLoading}>
+                        <ActivityIndicator color={fecaTheme.colors.primary} size="small" />
+                      </View>
+                    ) : null
                   }
                   renderItem={({ item }) => (
                     <Pressable
@@ -710,6 +1160,162 @@ export default function GroupDetailScreen() {
                 </Pressable>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- Editar plan (admin) --- */}
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setEditPlanVisible(false)}
+        transparent
+        visible={editPlanVisible}
+      >
+        <View style={styles.proposeOverlay}>
+          <View style={[styles.inviteSheet, { maxHeight: windowHeight * 0.9 }]}>
+            <View style={styles.modalHeader}>
+              <Pressable
+                onPress={() => setEditPlanVisible(false)}
+                style={styles.modalClose}
+              >
+                <Ionicons color={fecaTheme.colors.onSurface} name="close" size={20} />
+              </Pressable>
+              <Text style={styles.modalTitle}>Editar plan</Text>
+              <View style={styles.modalClose} />
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.editPlanScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <FormField
+                autoCapitalize="words"
+                autoCorrect={false}
+                label="Nombre"
+                onChangeText={setEditPlanName}
+                placeholder="Nombre del plan..."
+                value={editPlanName}
+              />
+              <Text style={styles.editPlanFieldLabel}>Visibilidad</Text>
+              <View style={styles.planChipRow}>
+                <Pressable
+                  onPress={() => setEditVisibility("private")}
+                  style={[
+                    styles.planChip,
+                    editVisibility === "private" && styles.planChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.planChipText,
+                      editVisibility === "private" && styles.planChipTextActive,
+                    ]}
+                  >
+                    Privado
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setEditVisibility("public_followers")}
+                  style={[
+                    styles.planChip,
+                    editVisibility === "public_followers" && styles.planChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.planChipText,
+                      editVisibility === "public_followers" &&
+                        styles.planChipTextActive,
+                    ]}
+                  >
+                    Público (seguidores)
+                  </Text>
+                </Pressable>
+              </View>
+              <Text style={styles.editPlanFieldLabel}>Quién puede proponer</Text>
+              <View style={styles.planChipRow}>
+                <Pressable
+                  onPress={() => setEditProposalPolicy("all_members")}
+                  style={[
+                    styles.planChip,
+                    editProposalPolicy === "all_members" && styles.planChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.planChipText,
+                      editProposalPolicy === "all_members" &&
+                        styles.planChipTextActive,
+                    ]}
+                  >
+                    Todos
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setEditProposalPolicy("owner_only")}
+                  style={[
+                    styles.planChip,
+                    editProposalPolicy === "owner_only" && styles.planChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.planChipText,
+                      editProposalPolicy === "owner_only" &&
+                        styles.planChipTextActive,
+                    ]}
+                  >
+                    Solo yo
+                  </Text>
+                </Pressable>
+              </View>
+              <Text style={styles.editPlanFieldLabel}>Propuestas de miembros</Text>
+              <View style={styles.planChipRow}>
+                <Pressable
+                  onPress={() => setEditMemberInteraction("collaborative")}
+                  style={[
+                    styles.planChip,
+                    editMemberInteraction === "collaborative" &&
+                      styles.planChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.planChipText,
+                      editMemberInteraction === "collaborative" &&
+                        styles.planChipTextActive,
+                    ]}
+                  >
+                    Colaborativo
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setEditMemberInteraction("announcement_locked")}
+                  style={[
+                    styles.planChip,
+                    editMemberInteraction === "announcement_locked" &&
+                      styles.planChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.planChipText,
+                      editMemberInteraction === "announcement_locked" &&
+                        styles.planChipTextActive,
+                    ]}
+                  >
+                    Solo anuncio
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+            <View style={styles.editPlanFooter}>
+              <GradientButton
+                disabled={editPlanBusy || !editPlanName.trim()}
+                label={editPlanBusy ? "Guardando…" : "Guardar"}
+                onPress={handleSaveEditPlan}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -806,7 +1412,9 @@ export default function GroupDetailScreen() {
             </View>
             <Text style={styles.inviteSheetSubtitle}>
               Elegí a quiénes querés sumar a este plan. También podés compartir el
-              código desde el botón compartir.
+              código desde el botón compartir. Algunas personas solo aceptan
+              invitaciones de usuarios que siguen: en ese caso la invitación puede
+              fallar si no te siguen.
             </Text>
             <View style={styles.inviteFormPad}>
               <FormField
@@ -946,6 +1554,123 @@ const styles = StyleSheet.create({
   createdBy: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.muted,
+  },
+  planActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: fecaTheme.spacing.md,
+    marginTop: fecaTheme.spacing.md,
+  },
+  planActionBtn: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  planActionLabel: {
+    ...fecaTheme.typography.bodyStrong,
+    color: fecaTheme.colors.primary,
+    fontSize: 14,
+  },
+  planActionBtnDanger: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  planActionLabelDanger: {
+    ...fecaTheme.typography.bodyStrong,
+    color: fecaTheme.colors.secondaryDim,
+    fontSize: 14,
+  },
+  publicPeekBanner: {
+    alignItems: "flex-start",
+    backgroundColor: fecaTheme.colors.primaryFixed,
+    borderRadius: fecaTheme.radii.md,
+    flexDirection: "row",
+    gap: fecaTheme.spacing.sm,
+    marginTop: fecaTheme.spacing.md,
+    padding: fecaTheme.spacing.md,
+  },
+  publicPeekBannerText: {
+    ...fecaTheme.typography.body,
+    color: fecaTheme.colors.onPrimaryFixed,
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  publicPeekMembersMeta: {
+    ...fecaTheme.typography.body,
+    color: fecaTheme.colors.muted,
+    fontSize: 14,
+    paddingVertical: fecaTheme.spacing.sm,
+  },
+  planChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: fecaTheme.spacing.sm,
+    marginBottom: fecaTheme.spacing.sm,
+  },
+  planChip: {
+    backgroundColor: fecaTheme.surfaces.high,
+    borderRadius: fecaTheme.radii.pill,
+    paddingHorizontal: fecaTheme.spacing.md,
+    paddingVertical: fecaTheme.spacing.sm,
+  },
+  planChipActive: {
+    backgroundColor: fecaTheme.colors.primary,
+  },
+  planChipText: {
+    ...fecaTheme.typography.label,
+    color: fecaTheme.colors.onSurface,
+  },
+  planChipTextActive: {
+    color: fecaTheme.colors.onPrimary,
+  },
+  editPlanScroll: {
+    paddingBottom: fecaTheme.spacing.md,
+    paddingHorizontal: fecaTheme.spacing.xl,
+  },
+  editPlanFieldLabel: {
+    ...fecaTheme.typography.bodyStrong,
+    color: fecaTheme.colors.onSurface,
+    fontSize: 13,
+    marginBottom: fecaTheme.spacing.xs,
+    marginTop: fecaTheme.spacing.md,
+  },
+  editPlanFooter: {
+    paddingHorizontal: fecaTheme.spacing.xl,
+    paddingTop: fecaTheme.spacing.sm,
+  },
+  rsvpBlock: {
+    borderTopColor: fecaTheme.colors.outlineVariant,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: fecaTheme.spacing.sm,
+    paddingTop: fecaTheme.spacing.md,
+  },
+  rsvpTitle: {
+    ...fecaTheme.typography.label,
+    color: fecaTheme.colors.muted,
+    marginBottom: fecaTheme.spacing.sm,
+  },
+  rsvpChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: fecaTheme.spacing.sm,
+  },
+  rsvpChip: {
+    backgroundColor: fecaTheme.surfaces.high,
+    borderRadius: fecaTheme.radii.pill,
+    paddingHorizontal: fecaTheme.spacing.md,
+    paddingVertical: fecaTheme.spacing.xs,
+  },
+  rsvpChipActive: {
+    backgroundColor: fecaTheme.colors.primaryFixed,
+  },
+  rsvpChipText: {
+    ...fecaTheme.typography.label,
+    color: fecaTheme.colors.onSurface,
+  },
+  rsvpChipTextActive: {
+    color: fecaTheme.colors.onPrimaryFixed,
   },
   section: {
     gap: fecaTheme.spacing.sm,
@@ -1210,6 +1935,16 @@ const styles = StyleSheet.create({
     color: fecaTheme.colors.muted,
     paddingVertical: fecaTheme.spacing.xl,
     textAlign: "center",
+  },
+  proposeSearchHint: {
+    ...fecaTheme.typography.label,
+    color: fecaTheme.colors.muted,
+    paddingHorizontal: fecaTheme.spacing.lg,
+    paddingBottom: fecaTheme.spacing.sm,
+  },
+  proposeSearchLoading: {
+    alignItems: "center",
+    paddingVertical: fecaTheme.spacing.sm,
   },
   dateStep: {
     gap: fecaTheme.spacing.lg,

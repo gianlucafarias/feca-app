@@ -17,8 +17,10 @@ The palette is built on a foundation of "Warm Neutrals" and "Soft Pastels," punc
  
 ### The "No-Line" Rule
 **Explicitly prohibit 1px solid borders for sectioning.** Boundaries must be defined solely through background color shifts. 
-*   Use `surface-container-low` (#f6f3f0) or `secondary-fixed` (#cfe5ff) sections sitting directly on the `surface` (#fcf9f6) background. 
+*   Use `surface-container-low` (#f6f3f0) or `primary-fixed` / `secondary-fixed` (#E4E6EA, neutro cálido) sections sitting directly on the `surface` (#fcf9f6) background.
  
+**Pastel semántico (opcional):** `theme.feca.surfaces.pastelButter`, `pastelLavender`, `pastelPeach`, `pastelMist` son fondos casi neutros con un tinte mínimo; usarlos solo cuando el contexto lo justifique (p. ej. tipo de tarjeta en feed o tono de chip), con texto siempre `on-surface` y fallback a `surface-container` / `high` si no hay mapping claro.
+
 ### Surface Hierarchy & Nesting
 Treat the UI as physical layers. Use the surface tiers to create depth without shadows:
 1.  **Base Layer:** `surface` (#fcf9f6) or `surface-bright`.
@@ -27,7 +29,7 @@ Treat the UI as physical layers. Use the surface tiers to create depth without s
  
 ### Signature Textures & Glass
 *   **The Glass Rule:** For floating elements like the bottom navigation, use semi-transparent `surface` colors with a `backdrop-blur` (e.g., 20px). This ensures the UI feels integrated into the content below.
-*   **Gradients:** Use subtle tonal transitions from `secondary` (#286393) to `secondary-dim` (#165786) for primary CTAs to add "soul" and depth that prevents a flat, sterile appearance.
+*   **Gradients:** Primary pill CTAs in producto usan `secondary` → `secondary-dim` (pizarra **#595F6A** → **#464B55**) con texto `on-primary` (#fcf9f6). Los slides de bienvenida pueden usar `primary` → `primary-container` para variar el tono sin romper la familia cromática.
  
 ---
  
@@ -56,12 +58,13 @@ In this system, depth is organic and ambient, never structural.
 ### Navigation: The Floating Pill
 The bottom navigation is a semi-transparent, hyper-rounded container.
 *   **Active State:** Indicated by a physical circular background (`primary-fixed`) behind the icon, creating a "button within a bar" effect.
-*   **Background:** `surface` with 80% opacity and `backdrop-filter: blur(12px)`.
+*   **Background:** `surface` con ~86% opacidad (`surfaces.glass`) y blur nativo (`expo-blur`); intensidad afinada en `FloatingTabBar`.
  
 ### Buttons: High Contrast
-*   **Primary:** High-contrast `on-surface` (Deep Navy/Black) background with `surface` text. Shape: `full` (9999px).
-*   **Secondary:** `primary-container` (#e2e2e2) with `on-primary-fixed`.
-*   **Tertiary/Ghost:** No background, `plusJakartaSans` bold labels.
+*   **Primary (gradient):** `GradientButton` — relleno en gradiente `secondary` → `secondary-dim`, texto `on-primary`, forma `full` (9999px). Mantiene contraste sobre fondo crema.
+*   **Primary (marketing slide CTA):** gradiente `primary` → `primary-container` con texto `on-primary` (pantalla welcome).
+*   **Secondary:** `primary-container` (#e2e2e2) con `on-primary-fixed` (#3A3F48).
+*   **Tertiary/Ghost:** Sin fondo, etiquetas `plusJakartaSans` en semibold.
  
 ### Cards & Collections
 *   **Rule:** Forbid divider lines. Use `1.5rem` to `2rem` vertical white space to separate items.
@@ -83,5 +86,5 @@ The bottom navigation is a semi-transparent, hyper-rounded container.
 ### Don't:
 *   **Don't** use 1px solid lines or "dividers." They break the editorial flow.
 *   **Don't** use sharp corners. If the radius is less than `1rem`, it is too sharp for this system.
-*   **Don't** use pure black (#000000). Always use the `on-surface` (#323330) or `on-secondary-fixed` (#00426c) for high-contrast elements to maintain tonal warmth.
+*   **Don't** use pure black (#000000). Para texto fuerte usá `on-surface` (#323330) o `on-primary-fixed` / `on-secondary-fixed` (#3A3F48) sobre superficies tintadas, para mantener calidez tonal.
 *   **Don't** crowd the layout. If a screen feels "busy," increase the whitespace (use `surface` background) and remove container backgrounds.

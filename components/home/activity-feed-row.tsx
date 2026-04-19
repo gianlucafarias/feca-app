@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AvatarBadge } from "@/components/ui/avatar-badge";
 import { formatRelativeVisitTime } from "@/lib/format";
-import { fecaTheme } from "@/theme/feca";
+import { feedCardSurfacePastel, fecaTheme } from "@/theme/feca";
 import type { FeedItem } from "@/types/feca";
 
 type ActivityFeedRowProps = {
@@ -11,10 +11,32 @@ type ActivityFeedRowProps = {
   onPress: () => void;
 };
 
+const LONG_NOTE_CHARS = 72;
+
 function firstName(displayName: string): string {
   const t = displayName.trim();
   if (!t) return "Alguien";
   return t.split(/\s+/)[0] ?? t;
+}
+
+function buildMainTail(item: FeedItem, note: string, hasLongNote: boolean): string {
+  const reason = item.reasonLine?.trim() ?? item.summary?.trim() ?? "";
+
+  if (hasLongNote) {
+    if (!reason) return "";
+    return ` · ${reason.length > 120 ? `${reason.slice(0, 120)}…` : reason}`;
+  }
+
+  const snippet = note
+    ? `${note.length > 100 ? `${note.slice(0, 100)}…` : note}`
+    : "";
+  if (snippet) {
+    return ` · ${snippet}`;
+  }
+  if (reason) {
+    return ` · ${reason.length > 120 ? `${reason.slice(0, 120)}…` : reason}`;
+  }
+  return "";
 }
 
 export function ActivityFeedRow({ item, onPress }: ActivityFeedRowProps) {
@@ -22,21 +44,22 @@ export function ActivityFeedRow({ item, onPress }: ActivityFeedRowProps) {
   const name = firstName(visit.user.displayName);
   const place = visit.place.name;
   const note = visit.note.trim();
-  const snippet = note
-    ? `${note.length > 100 ? `${note.slice(0, 100)}…` : note}`
-    : "";
-  const reason = item.reasonLine?.trim() ?? item.summary?.trim() ?? "";
-  const tail = snippet
-    ? ` · ${snippet}`
-    : reason
-      ? ` · ${reason.length > 120 ? `${reason.slice(0, 120)}…` : reason}`
-      : "";
+  const hasLongNote = note.length > LONG_NOTE_CHARS;
+  const tail = buildMainTail(item, note, hasLongNote);
+  const cardBg = feedCardSurfacePastel(
+    item.reasonLine?.trim() ?? "",
+    item.summary?.trim() ?? "",
+  );
 
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+      style={({ pressed }) => [
+        styles.pill,
+        { backgroundColor: cardBg },
+        pressed && styles.pillPressed,
+      ]}
     >
       <AvatarBadge
         accent={visit.place.accent}
@@ -50,6 +73,11 @@ export function ActivityFeedRow({ item, onPress }: ActivityFeedRowProps) {
           <Text style={styles.placeEm}>{place}</Text>
           {tail ? <Text style={styles.serifFill}>{tail}</Text> : null}
         </Text>
+        {hasLongNote ? (
+          <View style={styles.quoteWrap}>
+            <Text style={styles.quoteText}>{note}</Text>
+          </View>
+        ) : null}
         <View style={styles.metaRow}>
           <Text style={styles.time}>
             {formatRelativeVisitTime(visit.visitedAt)}
@@ -71,7 +99,6 @@ export function ActivityFeedRow({ item, onPress }: ActivityFeedRowProps) {
 const styles = StyleSheet.create({
   pill: {
     alignItems: "flex-start",
-    backgroundColor: fecaTheme.surfaces.high,
     borderRadius: fecaTheme.radii.xl,
     flexDirection: "row",
     gap: fecaTheme.spacing.md,
@@ -104,6 +131,19 @@ const styles = StyleSheet.create({
     color: fecaTheme.colors.onSurface,
     fontFamily: "Newsreader_500Medium_Italic",
     fontSize: 17,
+    lineHeight: 24,
+  },
+  quoteWrap: {
+    backgroundColor: fecaTheme.surfaces.low,
+    borderLeftColor: fecaTheme.colors.primaryFixed,
+    borderLeftWidth: 3,
+    paddingHorizontal: fecaTheme.spacing.md,
+    paddingVertical: fecaTheme.spacing.sm,
+  },
+  quoteText: {
+    color: fecaTheme.colors.onSurfaceVariant,
+    fontFamily: "Newsreader_400Regular_Italic",
+    fontSize: 16,
     lineHeight: 24,
   },
   metaRow: {

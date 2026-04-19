@@ -1,9 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   LayoutAnimation,
@@ -17,6 +15,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { NearbyPlaceSearchResults } from "@/components/visit/nearby-place-search-results";
+import { VisitVisitedAtField } from "@/components/visit/visit-visited-at-field";
 import { WriteReviewEditorial } from "@/components/visit/write-review-editorial";
 import { FormField } from "@/components/ui/form-field";
 import { PageBackground } from "@/components/ui/page-background";
@@ -27,8 +27,9 @@ import {
 } from "@/lib/api/places";
 import { createVisitApi } from "@/lib/api/visits";
 import { useKeyboardBottomInset } from "@/hooks/use-keyboard-bottom-inset";
+import { toVisitYyyyMmDd } from "@/lib/format";
 import { useAuth } from "@/providers/auth-provider";
-import { fecaTheme, hexToRgba } from "@/theme/feca";
+import { fecaTheme } from "@/theme/feca";
 import type { PlaceCategory, RichVisitDraft } from "@/types/feca";
 import type { NearbyPlace } from "@/types/places";
 
@@ -74,6 +75,7 @@ export default function NewVisitScreen() {
   const [tags, setTags] = useState<PlaceCategory[]>(["cafe"]);
   const [manualAddress, setManualAddress] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [visitedAt, setVisitedAt] = useState(() => toVisitYyyyMmDd(new Date()));
   const [richDraft, setRichDraft] = useState<RichVisitDraft>({
     orderedItems: "",
     wouldReturn: null,
@@ -110,14 +112,17 @@ export default function NewVisitScreen() {
   }, [step]);
 
   const loadInitialPlaces = useCallback(async () => {
-    if (lat == null || lng == null || !accessToken) return;
+    if (!accessToken) return;
+    const hasAnchor =
+      (lat != null && lng != null) || Boolean(cityGooglePlaceId?.trim());
+    if (!hasAnchor) return;
 
     setIsSearching(true);
     try {
       const results = await fetchNearbyPlaces({
         accessToken,
-        lat,
-        lng,
+        lat: lat ?? undefined,
+        lng: lng ?? undefined,
         limit: 8,
       });
       setSearchResults(results);
@@ -126,7 +131,7 @@ export default function NewVisitScreen() {
     } finally {
       setIsSearching(false);
     }
-  }, [accessToken, lat, lng]);
+  }, [accessToken, cityGooglePlaceId, lat, lng]);
 
   useEffect(() => {
     if (step === "search" && !query.trim()) {
@@ -136,7 +141,10 @@ export default function NewVisitScreen() {
 
   const searchPlaces = useCallback(
     async (text: string) => {
-      if (lat == null || lng == null || !accessToken) return;
+      if (!accessToken) return;
+      const hasAnchor =
+        (lat != null && lng != null) || Boolean(cityGooglePlaceId?.trim());
+      if (!hasAnchor) return;
 
       if (!text.trim()) {
         await loadInitialPlaces();
@@ -147,8 +155,8 @@ export default function NewVisitScreen() {
       try {
         const results = await fetchNearbyPlaces({
           accessToken,
-          lat,
-          lng,
+          lat: lat ?? undefined,
+          lng: lng ?? undefined,
           limit: 10,
           query: text.trim(),
         });
@@ -159,7 +167,7 @@ export default function NewVisitScreen() {
         setIsSearching(false);
       }
     },
-    [accessToken, lat, lng, loadInitialPlaces],
+    [accessToken, cityGooglePlaceId, lat, lng, loadInitialPlaces],
   );
 
   const handleQueryChange = useCallback(
@@ -257,7 +265,7 @@ export default function NewVisitScreen() {
         priceTier: richDraft.priceTier ?? undefined,
         rating,
         tags,
-        visitedAt: new Date().toISOString().slice(0, 10),
+        visitedAt,
         waitLevel: richDraft.waitLevel ?? undefined,
         wifiQuality: richDraft.wifiQuality ?? undefined,
         wouldReturn: richDraft.wouldReturn ?? undefined,
@@ -287,6 +295,9 @@ export default function NewVisitScreen() {
   };
 
   const writeReviewProps = {
+    belowNoteSlot: (
+      <VisitVisitedAtField onChangeYyyyMmDd={setVisitedAt} valueYyyyMmDd={visitedAt} />
+    ),
     isManualPlace: Boolean(selectedPlace?.isManual),
     isSaving,
     manualAddress,
@@ -360,91 +371,15 @@ export default function NewVisitScreen() {
                 showsVerticalScrollIndicator={false}
                 style={styles.searchScroll}
               >
-              <View style={styles.results}>
-                {isSearching ? (
-                  <View style={styles.loadingWrap}>
-                    <ActivityIndicator
-                      color={fecaTheme.colors.primary}
-                      size="small"
-                    />
-                  </View>
-                ) : (
-                  <>
-                    {searchResults.map((place) => (
-                      <Pressable
-                        key={place.googlePlaceId}
-                        onPress={() => handlePickPlace(place)}
-                        style={styles.option}
-                      >
-                        {place.photoUrl ? (
-                          <Image
-                            contentFit="cover"
-                            source={{ uri: place.photoUrl }}
-                            style={styles.optionThumb}
-                          />
-                        ) : (
-                          <View
-                            style={[
-                              styles.optionThumb,
-                              styles.optionThumbFallback,
-                            ]}
-                          >
-                            <Ionicons
-                              color={fecaTheme.colors.muted}
-                              name="cafe-outline"
-                              size={16}
-                            />
-                          </View>
-                        )}
-                        <View style={styles.optionText}>
-                          <Text numberOfLines={1} style={styles.optionName}>
-                            {place.name}
-                          </Text>
-                          <Text numberOfLines={1} style={styles.optionMeta}>
-                            {place.address}
-                          </Text>
-                        </View>
-                        {place.rating != null ? (
-                          <View style={styles.optionRating}>
-                            <Ionicons
-                              color={fecaTheme.colors.secondary}
-                              name="star"
-                              size={11}
-                            />
-                            <Text style={styles.optionRatingText}>
-                              {place.rating.toFixed(1)}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </Pressable>
-                    ))}
-
-                    {trimmedQuery ? (
-                      <Pressable onPress={handlePickManual} style={styles.option}>
-                        <View style={styles.createBadge}>
-                          <Ionicons
-                            color={fecaTheme.colors.primary}
-                            name="add"
-                            size={14}
-                          />
-                        </View>
-                        <Text style={styles.createText}>
-                          Agregar &quot;{trimmedQuery}&quot;
-                        </Text>
-                      </Pressable>
-                    ) : null}
-
-                    {!isSearching &&
-                    searchResults.length === 0 &&
-                    !trimmedQuery ? (
-                      <Text style={styles.emptyHint}>
-                        Escribe el nombre del lugar que visitaste
-                      </Text>
-                    ) : null}
-                  </>
-                )}
-              </View>
-            </ScrollView>
+                <NearbyPlaceSearchResults
+                  emptyNoQueryHint="Escribe el nombre del lugar que visitaste"
+                  isLoading={isSearching}
+                  onPressManualAdd={handlePickManual}
+                  onPressPlace={handlePickPlace}
+                  places={searchResults}
+                  queryTrimmed={trimmedQuery}
+                />
+              </ScrollView>
             </View>
           </KeyboardAvoidingView>
         ) : null}
@@ -598,75 +533,6 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: "center",
     width: 40,
-  },
-  results: {
-    gap: fecaTheme.spacing.sm,
-    paddingTop: fecaTheme.spacing.lg,
-  },
-  loadingWrap: {
-    alignItems: "center",
-    paddingVertical: fecaTheme.spacing.xxl,
-  },
-  option: {
-    alignItems: "center",
-    backgroundColor: fecaTheme.surfaces.low,
-    borderRadius: fecaTheme.radii.sm,
-    flexDirection: "row",
-    gap: fecaTheme.spacing.sm,
-    minHeight: 60,
-    paddingHorizontal: fecaTheme.spacing.md,
-    paddingVertical: fecaTheme.spacing.sm,
-  },
-  optionThumb: {
-    borderRadius: fecaTheme.radii.sm,
-    height: 40,
-    width: 40,
-  },
-  optionThumbFallback: {
-    alignItems: "center",
-    backgroundColor: fecaTheme.surfaces.high,
-    justifyContent: "center",
-  },
-  optionText: {
-    flex: 1,
-    gap: 2,
-  },
-  optionName: {
-    ...fecaTheme.typography.bodyStrong,
-    color: fecaTheme.colors.onSurface,
-  },
-  optionMeta: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.muted,
-  },
-  optionRating: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 3,
-  },
-  optionRatingText: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.onSurface,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    fontSize: 12,
-  },
-  emptyHint: {
-    ...fecaTheme.typography.meta,
-    color: fecaTheme.colors.muted,
-    paddingVertical: fecaTheme.spacing.xl,
-    textAlign: "center",
-  },
-  createBadge: {
-    alignItems: "center",
-    backgroundColor: hexToRgba(fecaTheme.colors.primary, 0.14),
-    borderRadius: fecaTheme.radii.pill,
-    height: 22,
-    justifyContent: "center",
-    width: 22,
-  },
-  createText: {
-    ...fecaTheme.typography.bodyStrong,
-    color: fecaTheme.colors.primary,
   },
   successWrap: {
     alignItems: "center",

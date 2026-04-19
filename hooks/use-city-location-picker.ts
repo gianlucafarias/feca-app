@@ -9,9 +9,11 @@ import {
 
 import {
   fetchCitiesAutocomplete,
+  fetchCityResolve,
   fetchCityReverseFromCoords,
   type ApiCanonicalCity,
 } from "@/lib/api/cities";
+import { logCityChange } from "@/lib/debug/city-change-debug";
 
 type ExpoLocationModule = typeof import("expo-location");
 
@@ -39,34 +41,6 @@ async function loadExpoLocation(): Promise<ExpoLocationModule> {
   return import("expo-location");
 }
 
-/**
- * Si el autocomplete no trae centro (lat/lng), el perfil y /places/nearby quedan sin ancla.
- * Fallback al geocodificador nativo (no es la ciudad canónica del backend, solo aproximación para mapa).
- */
-async function geocodeCityLabel(
-  label: string,
-): Promise<{ lat: number; lng: number } | null> {
-  const q = label.trim();
-  if (q.length < 2) {
-    return null;
-  }
-  try {
-    const Location = await loadExpoLocation();
-    const results = await Location.geocodeAsync(q);
-    const first = results[0];
-    if (
-      !first ||
-      !Number.isFinite(first.latitude) ||
-      !Number.isFinite(first.longitude)
-    ) {
-      return null;
-    }
-    return { lat: first.latitude, lng: first.longitude };
-  } catch {
-    return null;
-  }
-}
-
 function mapLocationNativeError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("ExpoLocation") || message.includes("native module")) {
@@ -90,6 +64,13 @@ export type UseCityLocationPickerOptions = {
    */
   resetKey?: string | number | null;
   onDraftChange?: (draft: CityLocationDraft) => void;
+  /**
+   * Si es false, el autocomplete de ciudades no manda lat/lng a Google (sin sesgo regional).
+   * Importante al **cambiar de ciudad** escribiendo: con sesgo cerca de Ceres/Argentina, “Barcelona”
+   * puede rankear un homónimo local con etiqueta confusa y coords incorrectas.
+   * @default true
+   */
+  locationBiasInAutocomplete?: boolean;
 };
 
 export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
@@ -101,6 +82,7 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
     initialCityGooglePlaceId,
     resetKey,
     onDraftChange,
+    locationBiasInAutocomplete = true,
   } = options;
 
   const [cityInput, setCityInput] = useState(initialCity);
@@ -201,11 +183,18 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
 
     void (async () => {
       try {
+        const useBias =
+          locationBiasInAutocomplete &&
+          typeof biasLatRef.current === "number" &&
+          Number.isFinite(biasLatRef.current) &&
+          typeof biasLngRef.current === "number" &&
+          Number.isFinite(biasLngRef.current);
+
         const list = await fetchCitiesAutocomplete(accessToken!, {
           q,
           limit: 10,
-          lat: biasLatRef.current,
-          lng: biasLngRef.current,
+          lat: useBias ? biasLatRef.current : undefined,
+          lng: useBias ? biasLngRef.current : undefined,
           sessionToken: sessionTokenRef.current,
           signal: ac.signal,
         });
@@ -233,7 +222,13 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
     })();
 
     return () => ac.abort();
-  }, [debouncedQuery, citySearchArmed, cityApiEnabled, accessToken]);
+  }, [
+    debouncedQuery,
+    citySearchArmed,
+    cityApiEnabled,
+    accessToken,
+    locationBiasInAutocomplete,
+  ]);
 
   const clearBlurTimer = useCallback(() => {
     if (blurTimerRef.current) {
@@ -244,6 +239,13 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
 
   const emitDraft = useCallback(
     (next: CityLocationDraft) => {
+      logCityChange("picker draft", {
+        city: next.city?.slice(0, 80),
+        displayName: next.displayName?.slice(0, 80),
+        cityGooglePlaceId: next.cityGooglePlaceId,
+        lat: next.lat,
+        lng: next.lng,
+      });
       setDraft(next);
       onDraftChange?.(next);
     },
@@ -252,6 +254,22 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
 
   const onChangeCityText = useCallback(
     (value: string) => {
+      const trimmed = value.trim();
+      const anchor = lastResolvedLabelRef.current?.trim();
+      /**
+       * Tras elegir sugerencia o GPS, RN suele disparar onChangeText con el mismo texto
+       * que acabamos de poner en el input. Ese “eco” no es una edición del usuario: si
+       * limpiamos el draft acá, borramos cityGooglePlaceId/lat/lng y el PATCH queda mal.
+       */
+      if (anchor && trimmed === anchor) {
+        logCityChange("onChangeText echo (no pisar draft)", { anchor });
+        setCityInput(value);
+        return;
+      }
+
+      logCityChange("onChangeText edición (resetea draft canónico)", {
+        trimmed: trimmed.slice(0, 80),
+      });
       lastResolvedLabelRef.current = null;
       setCitySearchArmed(true);
       setCityInput(value);
@@ -277,39 +295,35 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
       setIsResolvingCity(true);
 
       try {
-        setCitySearchArmed(true);
-        lastResolvedLabelRef.current = item.displayName;
-        setCityInput(item.displayName);
-
-        let lat = item.lat ?? biasLatRef.current;
-        let lng = item.lng ?? biasLngRef.current;
-        const coordsOk =
-          lat != null &&
-          lng != null &&
-          Number.isFinite(lat) &&
-          Number.isFinite(lng);
-
-        if (!coordsOk) {
-          const geo =
-            (await geocodeCityLabel(item.displayName)) ??
-            (await geocodeCityLabel(item.city));
-          if (geo) {
-            lat = geo.lat;
-            lng = geo.lng;
-          } else {
-            setSubmitError(
-              "No pudimos obtener el centro de la ciudad para el mapa. Probá «Usar mi ubicación actual».",
-            );
-            return;
-          }
+        if (!accessToken?.trim()) {
+          setSubmitError("Iniciá sesión para elegir una ciudad.");
+          return;
         }
 
+        setCitySearchArmed(true);
+
+        /** Autocomplete ya no trae lat/lng; el contrato FECA exige GET /v1/cities/resolve antes del PATCH. */
+        const resolved = await fetchCityResolve(accessToken, item.cityGooglePlaceId);
+        logCityChange("autocomplete resolve OK", {
+          pickedPlaceId: item.cityGooglePlaceId,
+          resolvedCity: resolved.city,
+          resolvedPlaceId: resolved.cityGooglePlaceId,
+          lat: resolved.lat,
+          lng: resolved.lng,
+        });
+
+        const label =
+          resolved.displayName?.trim() ||
+          resolved.city?.trim() ||
+          item.displayName.trim();
+        lastResolvedLabelRef.current = label;
+        setCityInput(label);
         emitDraft({
-          city: item.city,
-          displayName: item.displayName,
-          cityGooglePlaceId: item.cityGooglePlaceId,
-          lat,
-          lng,
+          city: resolved.city,
+          displayName: resolved.displayName,
+          cityGooglePlaceId: resolved.cityGooglePlaceId,
+          lat: resolved.lat,
+          lng: resolved.lng,
         });
         sessionTokenRef.current = createSessionToken();
       } catch (error) {
@@ -322,7 +336,7 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
         setIsResolvingCity(false);
       }
     },
-    [clearBlurTimer, emitDraft],
+    [accessToken, clearBlurTimer, emitDraft],
   );
 
   const resolvedCityLabel = useMemo(
@@ -363,11 +377,21 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
       );
 
       setCitySearchArmed(true);
-      lastResolvedLabelRef.current = canonical.displayName;
-      setCityInput(canonical.displayName);
+      const geoLabel =
+        canonical.displayName?.trim() ||
+        canonical.city.trim() ||
+        "";
+      lastResolvedLabelRef.current = geoLabel;
+      setCityInput(geoLabel);
       emitDraft({
         city: canonical.city,
         displayName: canonical.displayName,
+        cityGooglePlaceId: canonical.cityGooglePlaceId,
+        lat: canonical.lat,
+        lng: canonical.lng,
+      });
+      logCityChange("GPS reverse OK", {
+        city: canonical.city,
         cityGooglePlaceId: canonical.cityGooglePlaceId,
         lat: canonical.lat,
         lng: canonical.lng,
@@ -395,13 +419,20 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
       );
     }
 
-    return {
+    const out = {
       city,
       cityGooglePlaceId: id,
       lat: draft.lat,
       lng: draft.lng,
       displayName: draft.displayName?.trim() || city,
     };
+    logCityChange("resolveCoordinates (listo para PATCH)", {
+      city: out.city,
+      cityGooglePlaceId: out.cityGooglePlaceId,
+      lat: out.lat,
+      lng: out.lng,
+    });
+    return out;
   }, [draft.city, draft.cityGooglePlaceId, draft.displayName, draft.lat, draft.lng]);
 
   const setFieldBlur = useCallback(() => {
@@ -424,8 +455,9 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
       lng: number;
     }) => {
       setCitySearchArmed(true);
-      lastResolvedLabelRef.current = entry.label;
-      setCityInput(entry.label);
+      const label = entry.label.trim();
+      lastResolvedLabelRef.current = label;
+      setCityInput(label);
       emitDraft({
         city: entry.city,
         displayName: entry.label,

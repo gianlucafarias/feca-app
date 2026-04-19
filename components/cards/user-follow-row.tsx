@@ -29,8 +29,12 @@ export function UserFollowRow({
           size={40}
         />
         <View style={styles.info}>
-          <Text style={styles.name}>{user.displayName}</Text>
-          <Text style={styles.username}>@{user.username}</Text>
+          <Text numberOfLines={1} style={styles.name}>
+            {user.displayName}
+          </Text>
+          <Text numberOfLines={1} style={styles.username}>
+            @{user.username}
+          </Text>
         </View>
       </Pressable>
       <Pressable
@@ -83,6 +87,7 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
     gap: 1,
+    minWidth: 0,
   },
   name: {
     ...fecaTheme.typography.bodyStrong,

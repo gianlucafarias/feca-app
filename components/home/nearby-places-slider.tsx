@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
   ActivityIndicator,
@@ -11,24 +12,103 @@ import {
   View,
 } from "react-native";
 
-import { fecaTheme } from "@/theme/feca";
+import { EditorialCarouselCard } from "@/components/home/editorial-carousel-card";
+import { getNearbyFriendRows } from "@/lib/places/nearby-friend-rows";
+import { fecaTheme, hexToRgba } from "@/theme/feca";
 import type { NearbyPlace } from "@/types/places";
 
 const CARD_WIDTH = 208;
 const IMAGE_HEIGHT = 232;
+
+const ec = fecaTheme.homeEditorialCarousel;
+
 /** Ancho reservado a la derecha para “Ver mapa” (evita recorte por flex / clip del list) */
 const MAP_LINK_RESERVE = 118;
 
+const TYPE_LABELS: Record<string, string> = {
+  cafe: "Café",
+  restaurant: "Restaurante",
+  bakery: "Panadería",
+  bar: "Bar",
+  meal_takeaway: "Para llevar",
+};
+
+function formatPrimaryType(primaryType?: string) {
+  if (!primaryType) return null;
+  return TYPE_LABELS[primaryType] ?? primaryType.replace(/_/g, " ");
+}
+
+export type NearbyPlacesSliderCardLayout = "classic" | "editorial";
+
 type NearbyPlacesSliderProps = {
+  title: string;
   places: NearbyPlace[];
   isLoading: boolean;
   error: string | null;
   onRetry?: () => void;
+  /** Texto breve bajo el título. */
+  hint?: string;
+  /** Solo la sección principal suele mostrar el enlace a Explorar. */
+  showMapLink?: boolean;
+  /**
+   * Si true: tras terminar de cargar sin error, no se muestra nada si no hay lugares
+   * (p. ej. “Abierto ahora” vacío).
+   */
+  hideWhenEmptyAfterLoad?: boolean;
+  /**
+   * `editorial`: foto vertical, sello con rating, pill (por defecto en home).
+   */
+  cardLayout?: NearbyPlacesSliderCardLayout;
 };
 
-function SliderCard({ place }: { place: NearbyPlace }) {
+function buildSliderChips(place: NearbyPlace): { text: string; kind: "open" | "social" }[] {
+  const out: { text: string; kind: "open" | "social" }[] = [];
+  if (place.openingChip?.trim()) {
+    out.push({ text: place.openingChip.trim(), kind: "open" });
+  }
+  for (const line of place.socialChips ?? []) {
+    const t = line.trim();
+    if (t) {
+      out.push({ text: t, kind: "social" });
+    }
+  }
+  return out.slice(0, 3);
+}
+
+function buildEditorialCaption(place: NearbyPlace): string {
+  const social = place.socialChips?.find((s) => s.trim())?.trim();
+  if (social) return social;
+  const open = place.openingChip?.trim();
+  if (open) return open;
+  const typeLabel = formatPrimaryType(place.primaryType);
+  if (typeLabel) {
+    return `${typeLabel} para descubrir hoy`;
+  }
+  return place.name;
+}
+
+/** Texto del pill cuando ya mostramos amigos arriba (no repetir socialChips). */
+function buildEditorialPillText(place: NearbyPlace, friendCount: number): string {
+  if (friendCount > 0) {
+    const open = place.openingChip?.trim();
+    if (open) {
+      return open;
+    }
+    const typeLabel = formatPrimaryType(place.primaryType);
+    if (typeLabel) {
+      return `${typeLabel} para descubrir hoy`;
+    }
+    return "Tu red pasó por acá";
+  }
+  return buildEditorialCaption(place);
+}
+
+function SliderCardClassic({ place }: { place: NearbyPlace }) {
+  const chips = buildSliderChips(place);
+
   return (
     <Pressable
+      accessibilityLabel={`${place.name}. ${place.address}`}
       accessibilityRole="button"
       onPress={() => router.push(`/place/${place.googlePlaceId}`)}
       style={styles.card}
@@ -49,6 +129,43 @@ function SliderCard({ place }: { place: NearbyPlace }) {
             />
           </View>
         )}
+        {chips.length > 0 ? (
+          <>
+            <LinearGradient
+              colors={[
+                hexToRgba(fecaTheme.colors.onSurface, 0),
+                hexToRgba(fecaTheme.colors.onSurface, 0.35),
+                hexToRgba(fecaTheme.colors.onSurface, 0.82),
+              ]}
+              locations={[0, 0.45, 1]}
+              pointerEvents="none"
+              style={styles.photoGradient}
+            />
+            <View pointerEvents="none" style={styles.chipOverlay}>
+              <View style={styles.chipRow}>
+                {chips.map((c, i) => (
+                  <View
+                    key={`${place.googlePlaceId}-chip-${i}`}
+                    style={[
+                      styles.chip,
+                      c.kind === "open" ? styles.chipOpen : styles.chipSocial,
+                    ]}
+                  >
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.chipText,
+                        c.kind === "open" ? styles.chipTextOpen : styles.chipTextSocial,
+                      ]}
+                    >
+                      {c.text}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </>
+        ) : null}
         {place.rating != null ? (
           <View style={styles.ratingPill} accessibilityLabel={`Rating ${place.rating}`}>
             <Text style={styles.ratingValue}>{place.rating.toFixed(1)}</Text>
@@ -68,40 +185,102 @@ function SliderCard({ place }: { place: NearbyPlace }) {
   );
 }
 
+function SliderCardEditorial({ place, index }: { place: NearbyPlace; index: number }) {
+  const friendRows = getNearbyFriendRows(place);
+  const pillText = buildEditorialPillText(place, friendRows.length);
+  const ratingLine =
+    place.rating != null ? `Valoración ${place.rating.toFixed(1)} de 5. ` : "";
+  const friendsLine =
+    friendRows.length > 0
+      ? `${friendRows
+          .map((r) => `@${r.username}${r.snippet ? ` ${r.snippet}` : ""}`)
+          .join(". ")}. `
+      : "";
+  return (
+    <EditorialCarouselCard
+      accessibilityLabel={`${place.name}. ${friendsLine}${ratingLine}${pillText}`}
+      captionText={place.name}
+      fallbackIcon="cafe-outline"
+      friendRows={friendRows}
+      imageUrl={place.photoUrl}
+      index={index}
+      onPress={() => router.push(`/place/${place.googlePlaceId}`)}
+      pillText={pillText}
+      sealText={
+        place.rating != null ? place.rating.toFixed(1) : null
+      }
+    />
+  );
+}
+
 export function NearbyPlacesSlider({
+  title,
   places,
   isLoading,
   error,
   onRetry,
+  hint,
+  showMapLink = false,
+  hideWhenEmptyAfterLoad = false,
+  cardLayout = "editorial",
 }: NearbyPlacesSliderProps) {
+  const reserveRight = showMapLink ? MAP_LINK_RESERVE : 0;
+  const editorial = cardLayout === "editorial";
+  const loadingHeight = editorial ? ec.imageHeight + 24 : IMAGE_HEIGHT + 56;
+
+  if (
+    hideWhenEmptyAfterLoad &&
+    !isLoading &&
+    !error &&
+    places.length === 0
+  ) {
+    return null;
+  }
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text
           ellipsizeMode="tail"
           numberOfLines={1}
-          style={styles.sectionTitle}
+          style={[
+            editorial ? styles.sectionTitleEditorial : styles.sectionTitle,
+            { paddingRight: reserveRight },
+          ]}
         >
-          Lugares cerca
+          {title}
         </Text>
-        <Pressable
-          accessibilityLabel="Ver mapa"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={() => router.push("/explore")}
-          style={styles.mapLinkPressable}
-        >
-          <Text
-            style={styles.mapLink}
-            {...(Platform.OS === "android" ? { includeFontPadding: false } : {})}
+        {showMapLink ? (
+          <Pressable
+            accessibilityLabel="Ver mapa"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => router.push("/explore")}
+            style={styles.mapLinkPressable}
           >
-            Ver mapa
-          </Text>
-        </Pressable>
+            <Text
+              style={styles.mapLink}
+              {...(Platform.OS === "android" ? { includeFontPadding: false } : {})}
+            >
+              Ver mapa
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
+      {hint ? (
+        <Text
+          style={[
+            styles.hint,
+            reserveRight > 0 ? { paddingRight: reserveRight } : undefined,
+          ]}
+        >
+          {hint}
+        </Text>
+      ) : null}
+
       {isLoading ? (
-        <View style={styles.loadingRow}>
+        <View style={[styles.loadingRow, { height: loadingHeight }]}>
           <ActivityIndicator color={fecaTheme.colors.primary} />
         </View>
       ) : error ? (
@@ -125,9 +304,17 @@ export function NearbyPlacesSlider({
           horizontal
           showsHorizontalScrollIndicator={false}
         >
-          {places.map((place) => (
-            <SliderCard key={place.googlePlaceId} place={place} />
-          ))}
+          {places.map((place, index) =>
+            editorial ? (
+              <SliderCardEditorial
+                key={place.googlePlaceId}
+                index={index}
+                place={place}
+              />
+            ) : (
+              <SliderCardClassic key={place.googlePlaceId} place={place} />
+            ),
+          )}
         </ScrollView>
       )}
     </View>
@@ -145,13 +332,23 @@ const styles = StyleSheet.create({
     position: "relative",
     width: "100%",
   },
+  hint: {
+    ...fecaTheme.typography.meta,
+    color: fecaTheme.colors.muted,
+    lineHeight: 18,
+    marginBottom: fecaTheme.spacing.xs,
+  },
   sectionTitle: {
     ...fecaTheme.typography.title,
     color: fecaTheme.colors.onSurface,
     fontSize: 22,
     lineHeight: 26,
     maxWidth: "100%",
-    paddingRight: MAP_LINK_RESERVE,
+  },
+  sectionTitleEditorial: {
+    ...fecaTheme.typography.homeCarouselSection,
+    color: fecaTheme.colors.onSurface,
+    maxWidth: "100%",
   },
   mapLinkPressable: {
     alignItems: "center",
@@ -179,7 +376,7 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
   },
   imageWrap: {
-    borderRadius: fecaTheme.radii.xl,
+    borderRadius: fecaTheme.radii.carouselEditorial,
     height: IMAGE_HEIGHT,
     overflow: "hidden",
     position: "relative",
@@ -194,6 +391,24 @@ const styles = StyleSheet.create({
     backgroundColor: fecaTheme.surfaces.high,
     justifyContent: "center",
   },
+  photoGradient: {
+    bottom: 0,
+    height: 112,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    zIndex: 1,
+  },
+  chipOverlay: {
+    bottom: 0,
+    left: 0,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingTop: 6,
+    position: "absolute",
+    right: 0,
+    zIndex: 2,
+  },
   ratingPill: {
     alignItems: "center",
     backgroundColor: "rgba(245, 243, 239, 0.94)",
@@ -205,11 +420,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 10,
     top: 10,
+    zIndex: 3,
   },
   ratingValue: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.onSurface,
-    fontFamily: "Manrope_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 13,
   },
   cardBody: {
@@ -229,9 +445,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    borderRadius: fecaTheme.radii.pill,
+    maxWidth: "100%",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  chipOpen: {
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(76, 175, 128, 0.45)",
+  },
+  chipSocial: {
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+  },
+  chipText: {
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  chipTextOpen: {
+    color: fecaTheme.colors.onSurface,
+  },
+  chipTextSocial: {
+    color: fecaTheme.colors.onSurface,
+  },
   loadingRow: {
     alignItems: "center",
-    height: IMAGE_HEIGHT + 56,
     justifyContent: "center",
   },
   messageBox: {

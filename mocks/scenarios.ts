@@ -360,6 +360,9 @@ const mockGroups: FecaGroup[] = [
     id: "group-brunch-dom",
     name: "Brunch dominguero",
     inviteCode: "BRUNCH01",
+    visibility: "private",
+    placeProposalPolicy: "all_members",
+    memberProposalInteraction: "collaborative",
     createdBy: lucia,
     members: [
       { user: lucia, accepted: true },
@@ -401,6 +404,9 @@ const mockGroups: FecaGroup[] = [
   {
     id: "group-cafe-pendiente",
     name: "Café pendiente",
+    visibility: "private",
+    placeProposalPolicy: "all_members",
+    memberProposalInteraction: "collaborative",
     createdBy: me,
     members: [
       { user: me, accepted: true },
@@ -420,6 +426,9 @@ const mockGroups: FecaGroup[] = [
   {
     id: "group-probemos",
     name: "Probemos algo nuevo",
+    visibility: "public_followers",
+    placeProposalPolicy: "owner_only",
+    memberProposalInteraction: "collaborative",
     createdBy: valentina,
     members: [
       { user: valentina, accepted: true },

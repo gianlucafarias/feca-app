@@ -3,20 +3,38 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fecaTheme } from "@/theme/feca";
 
+export type ExploreQuickChipTone = "neutral" | "butter" | "lavender" | "peach";
+
 type ExploreQuickChipProps = {
   label: string;
   icon?: keyof typeof Ionicons.glyphMap;
   selected: boolean;
   /** Oscuro cuando está activo (p. ej. “Cerca de mí”) */
   emphasis?: "soft" | "strong";
+  /** Fondo pastel suave cuando no está seleccionado (Explorar). */
+  tone?: ExploreQuickChipTone;
   onPress: () => void;
 };
+
+function idleBackgroundForTone(tone: ExploreQuickChipTone | undefined) {
+  if (!tone || tone === "neutral") {
+    return fecaTheme.surfaces.highest;
+  }
+  if (tone === "butter") {
+    return fecaTheme.surfaces.pastelButter;
+  }
+  if (tone === "lavender") {
+    return fecaTheme.surfaces.pastelLavender;
+  }
+  return fecaTheme.surfaces.pastelPeach;
+}
 
 export function ExploreQuickChip({
   label,
   icon,
   selected,
   emphasis = "soft",
+  tone = "neutral",
   onPress,
 }: ExploreQuickChipProps) {
   const strongOn = emphasis === "strong" && selected;
@@ -30,7 +48,7 @@ export function ExploreQuickChip({
         styles.base,
         strongOn ? styles.strongSelected : null,
         !strongOn && selected ? styles.softSelected : null,
-        !selected ? styles.idle : null,
+        !selected ? { backgroundColor: idleBackgroundForTone(tone) } : null,
         pressed && styles.pressed,
       ]}
     >
@@ -72,9 +90,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: fecaTheme.spacing.md,
     paddingVertical: fecaTheme.spacing.xs,
-  },
-  idle: {
-    backgroundColor: fecaTheme.surfaces.highest,
   },
   softSelected: {
     backgroundColor: fecaTheme.colors.secondaryFixed,

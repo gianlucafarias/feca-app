@@ -105,7 +105,7 @@ export function FloatingTabBar({
         experimentalBlurMethod={
           Platform.OS === "android" ? "dimezisBlurView" : undefined
         }
-        intensity={Platform.OS === "ios" ? 28 : 48}
+        intensity={Platform.OS === "ios" ? 40 : 56}
         style={styles.barBlur}
         tint="light"
       >

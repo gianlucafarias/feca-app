@@ -3,16 +3,21 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { FormField } from "@/components/ui/form-field";
 import { GradientButton } from "@/components/ui/gradient-button";
+import { OnboardingProgressBar } from "@/components/ui/onboarding-progress-bar";
 import { PageBackground } from "@/components/ui/page-background";
+import { StackScreenHeader } from "@/components/ui/stack-screen-header";
 import { TextLinkButton } from "@/components/ui/text-link-button";
+import { useOnboardingBack } from "@/hooks/use-onboarding-back";
 import { useOnboarding } from "@/providers/onboarding-provider";
 import { fecaTheme } from "@/theme/feca";
 
 export default function UsernameScreen() {
   const { draft, updateDraft } = useOnboarding();
+  const goBack = useOnboardingBack();
 
   return (
     <PageBackground>
+      <StackScreenHeader title="Perfil" onPressBack={goBack} />
       <ScrollView
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
@@ -20,10 +25,11 @@ export default function UsernameScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.step}>PASO 1 DE 2</Text>
-          <Text style={styles.question}>¿Quién sos?</Text>
+          <OnboardingProgressBar />
+          <Text style={styles.question}>Tu perfil en FECA</Text>
           <Text style={styles.hint}>
-            Elegí cómo vas a aparecer en FECA.
+            El usuario es único y va en minúsculas. El nombre visible es cómo te ven el resto;
+            podés cambiarlo cuando quieras en Ajustes.
           </Text>
         </View>
 
@@ -33,13 +39,13 @@ export default function UsernameScreen() {
             autoCorrect={false}
             label="Usuario"
             onChangeText={(value) => updateDraft({ username: value })}
-            placeholder="@tuusuario"
+            placeholder="ej.: maria_lopez"
             value={draft.username}
           />
           <FormField
             label="Nombre visible"
             onChangeText={(value) => updateDraft({ displayName: value })}
-            placeholder="Cómo querés aparecer"
+            placeholder="Ej.: María López"
             value={draft.displayName}
           />
         </View>
@@ -47,7 +53,7 @@ export default function UsernameScreen() {
         <View style={styles.actions}>
           <GradientButton
             disabled={!draft.username.trim()}
-            label="Seguir"
+            label="Continuar"
             onPress={() => {
               if (!draft.username.trim()) {
                 return;
@@ -60,10 +66,7 @@ export default function UsernameScreen() {
               router.push("/(onboarding)/city");
             }}
           />
-          <TextLinkButton
-            label="Volver"
-            onPress={() => router.replace("/(onboarding)/welcome")}
-          />
+          <TextLinkButton label="Atrás" onPress={goBack} />
         </View>
       </ScrollView>
     </PageBackground>
@@ -75,15 +78,10 @@ const styles = StyleSheet.create({
     gap: fecaTheme.spacing.xxl,
     paddingBottom: fecaTheme.spacing.xxxl,
     paddingHorizontal: fecaTheme.spacing.xl,
-    paddingTop: 100,
+    paddingTop: fecaTheme.spacing.md,
   },
   header: {
-    gap: fecaTheme.spacing.sm,
-  },
-  step: {
-    ...fecaTheme.typography.label,
-    color: fecaTheme.colors.secondary,
-    letterSpacing: 2,
+    gap: fecaTheme.spacing.md,
   },
   question: {
     ...fecaTheme.typography.display,

@@ -1,5 +1,17 @@
-import type { ApiDiary, ApiGroup, ApiSavedPlaceRow } from "@/types/api";
-import type { CafeDiary, FecaGroup, GroupEvent, SavedPlace } from "@/types/feca";
+import type {
+  ApiDiary,
+  ApiFriendPublicPlanSummary,
+  ApiGroup,
+  ApiGroupEvent,
+  ApiSavedPlaceRow,
+} from "@/types/api";
+import type {
+  CafeDiary,
+  FecaGroup,
+  FriendPublicPlan,
+  GroupEvent,
+  SavedPlace,
+} from "@/types/feca";
 
 import { mapApiPlaceSummaryToPlace } from "./map-api-place";
 import { mapApiUserPublicToUser } from "./map-api-user";
@@ -14,11 +26,76 @@ export function mapApiSavedRowToSavedPlace(row: ApiSavedPlaceRow): SavedPlace {
   };
 }
 
+function resolveEventInteractionFlags(
+  e: ApiGroupEvent,
+  api: ApiGroup,
+): Pick<GroupEvent, "allowsRsvp" | "allowsConfirm" | "allowsCounterProposals"> {
+  if (
+    e.allowsRsvp != null &&
+    e.allowsConfirm != null &&
+    e.allowsCounterProposals != null
+  ) {
+    return {
+      allowsRsvp: Boolean(e.allowsRsvp),
+      allowsConfirm: Boolean(e.allowsConfirm),
+      allowsCounterProposals: Boolean(e.allowsCounterProposals),
+    };
+  }
+  const mode = api.memberProposalInteraction ?? "collaborative";
+  const proposedByMember = e.proposedBy.id !== api.createdBy.id;
+  if (mode === "announcement_locked" && proposedByMember) {
+    return {
+      allowsRsvp: false,
+      allowsConfirm: false,
+      allowsCounterProposals: false,
+    };
+  }
+  return {
+    allowsRsvp: true,
+    allowsConfirm: true,
+    allowsCounterProposals: true,
+  };
+}
+
+export function mapApiFriendPublicPlanSummary(
+  row: ApiFriendPublicPlanSummary,
+): FriendPublicPlan {
+  const area =
+    row.nextEvent?.areaLabel?.trim() ||
+    row.nextEvent?.placeName ||
+    "";
+  return {
+    id: row.id,
+    name: row.name,
+    createdBy: mapApiUserPublicToUser(row.createdBy),
+    friendParticipant: mapApiUserPublicToUser(row.friendParticipant),
+    nextEvent: row.nextEvent
+      ? {
+          date: row.nextEvent.date,
+          placeName: row.nextEvent.placeName,
+          areaLabel: area,
+          status: row.nextEvent.status,
+        }
+      : null,
+    memberCount: Math.max(0, row.memberCount ?? 0),
+  };
+}
+
 export function mapApiGroupToFecaGroup(api: ApiGroup): FecaGroup {
+  const visibility = api.visibility ?? "private";
+  const placeProposalPolicy = api.placeProposalPolicy ?? "all_members";
+  const memberProposalInteraction =
+    api.memberProposalInteraction ?? "collaborative";
+
   return {
     id: api.id,
     name: api.name,
     inviteCode: api.inviteCode ?? undefined,
+    viewerMembership: api.viewerMembership ?? undefined,
+    memberCount:
+      api.memberCount != null && Number.isFinite(Number(api.memberCount))
+        ? Number(api.memberCount)
+        : undefined,
     createdBy: mapApiUserPublicToUser(api.createdBy),
     members: api.members.map((m) => ({
       user: mapApiUserPublicToUser(m.user),
@@ -34,8 +111,12 @@ export function mapApiGroupToFecaGroup(api: ApiGroup): FecaGroup {
         status: e.status,
         proposedBy: mapApiUserPublicToUser(e.proposedBy),
         myRsvp: e.myRsvp ?? undefined,
+        ...resolveEventInteractionFlags(e, api),
       }),
     ),
+    visibility,
+    placeProposalPolicy,
+    memberProposalInteraction,
   };
 }
 
