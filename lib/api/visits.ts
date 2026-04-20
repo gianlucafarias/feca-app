@@ -4,7 +4,12 @@ import type {
   CreateVisitPayload,
 } from "@/types/api";
 
-import { getApiBaseUrl, parseError, rethrowWithNetworkHelp } from "./base";
+import {
+  FECA_PLACES_ORIGIN_HEADER,
+  getApiBaseUrl,
+  parseError,
+  rethrowWithNetworkHelp,
+} from "./base";
 
 type ListVisitsResponse = {
   visits?: ApiVisit[];
@@ -84,6 +89,7 @@ export async function fetchFeed(
     lng?: number;
     /** Con mode=city alinea el feed con la ciudad elegida en la app (además del perfil). */
     cityGooglePlaceId?: string;
+    origin?: string;
   },
 ): Promise<{
   items: ApiFeedItem[];
@@ -104,8 +110,15 @@ export async function fetchFeed(
   const qs = params.toString();
   const url = `${getApiBaseUrl()}/v1/feed${qs ? `?${qs}` : ""}`;
 
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (options?.origin?.trim()) {
+    headers[FECA_PLACES_ORIGIN_HEADER] = options.origin.trim();
+  }
+
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers,
   });
 
   if (!response.ok) {

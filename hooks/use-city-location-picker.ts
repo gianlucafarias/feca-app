@@ -54,6 +54,7 @@ function mapLocationNativeError(error: unknown): Error {
 export type UseCityLocationPickerOptions = {
   /** Requerido para autocomplete y reverse vía FECA. */
   accessToken?: string;
+  origin?: string;
   initialCity: string;
   initialLat?: number;
   initialLng?: number;
@@ -76,6 +77,7 @@ export type UseCityLocationPickerOptions = {
 export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
   const {
     accessToken,
+    origin = "change_city_sheet",
     initialCity,
     initialLat,
     initialLng,
@@ -195,6 +197,7 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
           limit: 10,
           lat: useBias ? biasLatRef.current : undefined,
           lng: useBias ? biasLngRef.current : undefined,
+          origin,
           sessionToken: sessionTokenRef.current,
           signal: ac.signal,
         });
@@ -228,6 +231,7 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
     cityApiEnabled,
     accessToken,
     locationBiasInAutocomplete,
+    origin,
   ]);
 
   const clearBlurTimer = useCallback(() => {
@@ -303,7 +307,9 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
         setCitySearchArmed(true);
 
         /** Autocomplete ya no trae lat/lng; el contrato FECA exige GET /v1/cities/resolve antes del PATCH. */
-        const resolved = await fetchCityResolve(accessToken, item.cityGooglePlaceId);
+        const resolved = await fetchCityResolve(accessToken, item.cityGooglePlaceId, {
+          origin,
+        });
         logCityChange("autocomplete resolve OK", {
           pickedPlaceId: item.cityGooglePlaceId,
           resolvedCity: resolved.city,
@@ -336,7 +342,7 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
         setIsResolvingCity(false);
       }
     },
-    [accessToken, clearBlurTimer, emitDraft],
+    [accessToken, clearBlurTimer, emitDraft, origin],
   );
 
   const resolvedCityLabel = useMemo(
@@ -374,6 +380,7 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
         accessToken,
         position.coords.latitude,
         position.coords.longitude,
+        { origin },
       );
 
       setCitySearchArmed(true);
@@ -401,7 +408,7 @@ export function useCityLocationPicker(options: UseCityLocationPickerOptions) {
     } finally {
       setIsLocating(false);
     }
-  }, [accessToken, emitDraft]);
+  }, [accessToken, emitDraft, origin]);
 
   const resolveCoordinates = useCallback(async () => {
     const city = draft.city.trim();

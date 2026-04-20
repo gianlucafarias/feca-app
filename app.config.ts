@@ -96,8 +96,16 @@ const config: ExpoConfig = {
     [
       "expo-notifications",
       {
-        icon: "./assets/images/icon.png",
+        defaultChannel: "feca-default",
+        icon: "./assets/images/notification-icon-monochrome.png",
         color: "#595F6A",
+      },
+    ],
+    [
+      "expo-image-picker",
+      {
+        photosPermission:
+          "FECA necesita acceso a tu galeria para adjuntar fotos a la resena.",
       },
     ],
     "@react-native-community/datetimepicker",

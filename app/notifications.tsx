@@ -1,6 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Linking from "expo-linking";
-import { router, type Href } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,6 +21,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/api/notifications";
+import { openApiNotification } from "@/lib/notifications/open-notification-target";
 import { useAuth } from "@/providers/auth-provider";
 import { useUnreadNotifications } from "@/providers/unread-notifications-provider";
 import { fecaTheme, hexToRgba } from "@/theme/feca";
@@ -43,54 +42,55 @@ function formatNotifTime(iso: string) {
   }
 }
 
-/** Prioriza `body` / `title` del backend; solo si faltan, texto por tipo. */
-function notificationFallbackText(n: ApiNotification): string {
-  const a = n.actor;
-  switch (n.type) {
+function notificationFallbackText(notification: ApiNotification): string {
+  const actor = notification.actor;
+
+  switch (notification.type) {
     case "follow":
-      return a ? `${a.displayName} empezó a seguirte` : "Alguien empezó a seguirte";
+      return actor
+        ? `${actor.displayName} empezo a seguirte`
+        : "Alguien empezo a seguirte";
     case "group_invite":
-      return a ? `${a.displayName} te invitó a un plan` : "Te invitaron a un plan";
+      return actor ? `${actor.displayName} te invito a un plan` : "Te invitaron a un plan";
     case "group_joined":
-      return a ? `${a.displayName} se unió al plan` : "Alguien se unió al plan";
+      return actor ? `${actor.displayName} se unio al plan` : "Alguien se unio al plan";
     case "group_event_proposed":
-      return a ? `${a.displayName} propuso un encuentro` : "Nuevo encuentro en un plan";
+      return actor ? `${actor.displayName} propuso un encuentro` : "Nuevo encuentro en un plan";
     case "group_event_rsvp":
-      return a ? `${a.displayName} respondió al encuentro` : "Respuesta en un plan";
+      return actor ? `${actor.displayName} respondio al encuentro` : "Respuesta en un plan";
     case "visit_created":
-      return a ? `${a.displayName} registró una visita` : "Nueva visita en tu red";
+      return actor ? `${actor.displayName} registro una visita` : "Nueva visita en tu red";
     case "diary_published":
-      return a ? `${a.displayName} publicó una guía` : "Nueva guía en tu red";
+      return actor ? `${actor.displayName} publico una guia` : "Nueva guia en tu red";
+    case "group_invite_reminder":
+      return "Tenes una invitacion pendiente";
+    case "group_event_rsvp_reminder":
+      return "Falta tu respuesta en un plan";
+    case "group_event_today_reminder":
+      return "Tenes un plan para hoy";
+    case "weekly_digest":
+      return "Resumen semanal disponible";
+    case "contextual_recommendation":
+      return "Tenemos una recomendacion para vos";
     default:
-      return "Nueva notificación";
+      return "Nueva notificacion";
   }
 }
 
-function primaryLines(n: ApiNotification): { headline?: string; text: string } {
-  const title = n.title?.trim();
-  const body = n.body?.trim();
+function primaryLines(notification: ApiNotification): {
+  headline?: string;
+  text: string;
+} {
+  const title = notification.title?.trim();
+  const body = notification.body?.trim();
+
   if (title && body) {
     return { headline: title, text: body };
   }
-  const single = body || title || notificationFallbackText(n);
-  return { text: single };
-}
 
-function openFromNotification(n: ApiNotification) {
-  const d = n.deepLink?.trim();
-  if (d) {
-    if (d.startsWith("/")) {
-      router.push(d as Href);
-      return;
-    }
-    if (d.startsWith("http://") || d.startsWith("https://")) {
-      void Linking.openURL(d);
-      return;
-    }
-  }
-  if (n.type === "follow" && n.actor) {
-    router.push(`/user/${n.actor.id}` as Href);
-  }
+  return {
+    text: body || title || notificationFallbackText(notification),
+  };
 }
 
 export default function NotificationsScreen() {
@@ -108,17 +108,18 @@ export default function NotificationsScreen() {
       setLoading(false);
       return;
     }
+
     setLoading(true);
     try {
-      const res = await fetchNotifications(session.accessToken, { limit: 50 });
-      setItems(res.notifications);
+      const response = await fetchNotifications(session.accessToken, { limit: 50 });
+      setItems(response.notifications);
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
       void refreshUnreadCount();
     }
-  }, [session?.accessToken, refreshUnreadCount]);
+  }, [refreshUnreadCount, session?.accessToken]);
 
   useEffect(() => {
     void load();
@@ -131,42 +132,51 @@ export default function NotificationsScreen() {
   }, [load]);
 
   const handleMarkAllRead = useCallback(async () => {
-    if (!session?.accessToken || markAllBusy) return;
+    if (!session?.accessToken || markAllBusy) {
+      return;
+    }
+
     setMarkAllBusy(true);
     try {
       await markAllNotificationsRead(session.accessToken);
-      setItems((prev) => prev.map((x) => ({ ...x, read: true })));
+      setItems((current) => current.map((item) => ({ ...item, read: true })));
       void refreshUnreadCount();
     } catch {
-      /* ignore */
+      // Ignore optimistic refresh failures here.
     } finally {
       setMarkAllBusy(false);
     }
-  }, [session?.accessToken, markAllBusy, refreshUnreadCount]);
+  }, [markAllBusy, refreshUnreadCount, session?.accessToken]);
 
   const handleOpen = useCallback(
-    (n: ApiNotification) => {
-      if (!session?.accessToken) return;
+    (notification: ApiNotification) => {
+      if (!session?.accessToken) {
+        return;
+      }
+
       void (async () => {
         try {
-          if (!n.read) {
-            await markNotificationRead(n.id, session.accessToken);
-            setItems((prev) =>
-              prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
+          if (!notification.read) {
+            await markNotificationRead(notification.id, session.accessToken);
+            setItems((current) =>
+              current.map((item) =>
+                item.id === notification.id ? { ...item, read: true } : item,
+              ),
             );
             void refreshUnreadCount();
           }
         } catch {
-          /* ignore */
+          // Ignore mark-read failures; opening the target still matters.
         }
-        openFromNotification(n);
+
+        openApiNotification(notification);
       })();
     },
-    [session?.accessToken, refreshUnreadCount],
+    [refreshUnreadCount, session?.accessToken],
   );
 
   const listPaddingBottom = paddingBottomStackScreen(insets.bottom);
-  const hasUnread = items.some((x) => !x.read);
+  const hasUnread = items.some((item) => !item.read);
 
   if (!session?.accessToken) {
     return (
@@ -174,9 +184,9 @@ export default function NotificationsScreen() {
         <View style={styles.flex}>
           <StackScreenHeader title="Notificaciones" />
           <EmptyState
-            description="Iniciá sesión para ver avisos de tu red y tus planes."
+            description="Inicia sesion para ver avisos de tu red y tus planes."
             icon="notifications-outline"
-            title="Sin sesión"
+            title="Sin sesion"
           />
         </View>
       </PageBackground>
@@ -190,7 +200,7 @@ export default function NotificationsScreen() {
           right={
             hasUnread ? (
               <Pressable
-                accessibilityLabel="Marcar todas como leídas"
+                accessibilityLabel="Marcar todas como leidas"
                 accessibilityRole="button"
                 disabled={markAllBusy}
                 hitSlop={8}
@@ -198,7 +208,7 @@ export default function NotificationsScreen() {
                 style={styles.markAllBtn}
               >
                 <Text style={styles.markAllText}>
-                  {markAllBusy ? "…" : "Todas leídas"}
+                  {markAllBusy ? "..." : "Todas leidas"}
                 </Text>
               </Pressable>
             ) : null
@@ -212,13 +222,16 @@ export default function NotificationsScreen() {
           </View>
         ) : (
           <FlatList
-            contentContainerStyle={[styles.list, { paddingBottom: listPaddingBottom }]}
+            contentContainerStyle={[
+              styles.list,
+              { paddingBottom: listPaddingBottom },
+            ]}
             contentInsetAdjustmentBehavior="never"
             data={items}
             keyExtractor={(item) => item.id}
             ListEmptyComponent={
               <EmptyState
-                description="Cuando haya novedades de tu red o tus planes, las vas a ver acá."
+                description="Cuando haya novedades de tu red o tus planes, las vas a ver aca."
                 icon="notifications-outline"
                 title="Nada nuevo"
               />
@@ -232,9 +245,8 @@ export default function NotificationsScreen() {
             }
             renderItem={({ item }) => {
               const { headline, text } = primaryLines(item);
-              const metaActor = item.actor
-                ? `@${item.actor.username}`
-                : null;
+              const metaActor = item.actor ? `@${item.actor.username}` : null;
+
               return (
                 <Pressable
                   onPress={() => handleOpen(item)}
@@ -255,17 +267,17 @@ export default function NotificationsScreen() {
                       />
                     </View>
                   )}
+
                   <View style={styles.rowBody}>
-                    {headline ? (
-                      <Text style={styles.rowHeadline}>{headline}</Text>
-                    ) : null}
+                    {headline ? <Text style={styles.rowHeadline}>{headline}</Text> : null}
                     <Text style={styles.rowText}>{text}</Text>
                     <Text style={styles.rowMeta}>
                       {[metaActor, formatNotifTime(item.createdAt)]
                         .filter(Boolean)
-                        .join(" · ")}
+                        .join(" / ")}
                     </Text>
                   </View>
+
                   {!item.read ? <View style={styles.dot} /> : null}
                   <Ionicons
                     color={fecaTheme.colors.muted}

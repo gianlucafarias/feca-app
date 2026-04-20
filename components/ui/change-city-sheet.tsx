@@ -73,7 +73,6 @@ export function ChangeCitySheet({
     onPickCitySuggestion,
     cityApiEnabled,
     resolveCoordinates,
-    resolvedCityLabel,
     setFieldBlur,
     setFieldFocus,
     setSubmitError,
@@ -83,6 +82,7 @@ export function ChangeCitySheet({
     suggestionsLoading,
   } = useCityLocationPicker({
     accessToken: session?.accessToken,
+    origin: "change_city_sheet",
     initialCity,
     initialCityGooglePlaceId: session?.user.cityGooglePlaceId,
     initialLat,

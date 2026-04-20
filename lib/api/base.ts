@@ -5,6 +5,8 @@ type ErrorPayload = {
   details?: unknown;
 };
 
+export const FECA_PLACES_ORIGIN_HEADER = "X-FECA-Places-Origin";
+
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly code?: string;

@@ -1,6 +1,5 @@
 import type { ApiOutingPreferencesV1 } from "@/types/api";
 import type {
-  AuthLoginResult,
   AuthSession,
   AuthenticatedUser,
   GroupInvitePolicy,
@@ -72,6 +71,9 @@ export function normalizeAuthenticatedUser(user: AuthenticatedUser): Authenticat
     groupInvitePolicyRaw === "everyone"
       ? groupInvitePolicyRaw
       : user.groupInvitePolicy;
+  const pushEnabledRaw = readBooleanish(
+    raw.pushEnabled ?? raw.push_enabled,
+  );
 
   const outingRaw = raw.outingPreferences;
   let outingPreferences: ApiOutingPreferencesV1 | null | undefined;
@@ -119,6 +121,7 @@ export function normalizeAuthenticatedUser(user: AuthenticatedUser): Authenticat
     lat,
     lng,
     ...(groupInvitePolicy !== undefined ? { groupInvitePolicy } : {}),
+    ...(pushEnabledRaw !== undefined ? { pushEnabled: pushEnabledRaw } : {}),
     ...(outingPreferences !== undefined ? { outingPreferences } : {}),
     ...(isEditor !== undefined ? { isEditor } : {}),
     ...(isAdmin !== undefined ? { isAdmin } : {}),
@@ -152,6 +155,9 @@ export function mergeAuthenticatedUserAfterProfilePatch(
   if (input.lng !== undefined) overlay.lng = input.lng;
   if (input.groupInvitePolicy !== undefined) {
     overlay.groupInvitePolicy = input.groupInvitePolicy;
+  }
+  if (input.pushEnabled !== undefined) {
+    overlay.pushEnabled = input.pushEnabled;
   }
   if (input.outingPreferences !== undefined) {
     overlay.outingPreferences = input.outingPreferences;

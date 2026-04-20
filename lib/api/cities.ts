@@ -1,4 +1,14 @@
-import { getApiBaseUrl, parseError } from "./base";
+import { FECA_PLACES_ORIGIN_HEADER, getApiBaseUrl, parseError } from "./base";
+
+function buildCityHeaders(accessToken: string, origin?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (origin?.trim()) {
+    headers[FECA_PLACES_ORIGIN_HEADER] = origin.trim();
+  }
+  return headers;
+}
 
 /** Ciudad canónica (FECA / Google Place de localidad). */
 export type ApiCanonicalCity = {
@@ -111,7 +121,7 @@ function mapToCanonicalCity(row: unknown): ApiCanonicalCity | null {
 export async function fetchCityResolve(
   accessToken: string,
   cityGooglePlaceId: string,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; origin?: string },
 ): Promise<ApiCanonicalCity> {
   const id = cityGooglePlaceId.trim();
   if (!id) {
@@ -124,7 +134,7 @@ export async function fetchCityResolve(
   const response = await fetch(
     `${getApiBaseUrl()}/v1/cities/resolve?${params.toString()}`,
     {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: buildCityHeaders(accessToken, options?.origin),
       signal: options?.signal,
     },
   );
@@ -152,6 +162,7 @@ export async function fetchCitiesAutocomplete(
     lng?: number;
     sessionToken?: string;
     signal?: AbortSignal;
+    origin?: string;
   },
 ): Promise<ApiCanonicalCity[]> {
   const params = new URLSearchParams();
@@ -177,7 +188,7 @@ export async function fetchCitiesAutocomplete(
   const response = await fetch(
     `${getApiBaseUrl()}/v1/cities/autocomplete?${params.toString()}`,
     {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: buildCityHeaders(accessToken, options.origin),
       signal: options.signal,
     },
   );
@@ -202,6 +213,7 @@ export async function fetchCityReverseFromCoords(
   accessToken: string,
   lat: number,
   lng: number,
+  options?: { signal?: AbortSignal; origin?: string },
 ): Promise<ApiCanonicalCity> {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     throw new Error("Coordenadas inválidas para resolver la ciudad.");
@@ -215,7 +227,8 @@ export async function fetchCityReverseFromCoords(
   const response = await fetch(
     `${getApiBaseUrl()}/v1/cities/reverse?${params.toString()}`,
     {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: buildCityHeaders(accessToken, options?.origin),
+      signal: options?.signal,
     },
   );
 

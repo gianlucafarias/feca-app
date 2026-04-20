@@ -49,6 +49,7 @@ export function useNearbyPlaces(options: {
           lat,
           lng,
           limit,
+          origin: "nearby_hook",
           ...(homeFeedVariant ? { variant: homeFeedVariant } : {}),
           ...(rotateAt != null && rotateAt > 0 ? { rotate: rotateAt } : {}),
         });

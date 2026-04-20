@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import { Redirect, router, type Href } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -22,13 +23,12 @@ import { PrimaryButton } from "@/components/ui/primary-button";
 import { paddingBottomStackScreen } from "@/components/ui/screen-padding";
 import { StackScreenHeader } from "@/components/ui/stack-screen-header";
 import { fetchMe } from "@/lib/api/me";
+import { ensureAndroidNotificationChannel } from "@/lib/push/expo-notifications-setup";
 import { useAuth } from "@/providers/auth-provider";
 import { fecaTheme } from "@/theme/feca";
 import type { GroupInvitePolicy } from "@/types/auth";
 
-/** Rojo Material-style (no hay token `error` en el theme FECA). */
 const DANGER = "#B3261E";
-
 const USERNAME_RE = /^[a-z0-9-]{3,30}$/;
 
 export default function EditProfileScreen() {
@@ -42,6 +42,8 @@ export default function EditProfileScreen() {
   const [email, setEmail] = useState("");
   const [cityLabel, setCityLabel] = useState("");
   const [planInviteBusy, setPlanInviteBusy] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(session?.user.pushEnabled !== false);
+  const [pushBusy, setPushBusy] = useState(false);
   const [citySheetOpen, setCitySheetOpen] = useState(false);
   const [citySheetResetKey, setCitySheetResetKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export default function EditProfileScreen() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!token) {
+    if (!token || !session) {
       setLoadingForm(false);
       return;
     }
@@ -65,21 +67,25 @@ export default function EditProfileScreen() {
         if (cancelled) {
           return;
         }
+
         setDisplayName(me.displayName ?? "");
         setUsername(me.username ?? "");
         setBio(me.bio?.trim() ?? "");
         setEmail(me.email ?? session.user.email ?? "");
         setCityLabel(me.city?.trim() || "Sin ciudad");
+        setPushEnabled(me.pushEnabled !== false);
       } catch {
         if (cancelled) {
           return;
         }
+
         setDisplayName(session.user.displayName ?? "");
         setUsername(session.user.username ?? "");
         setBio(session.user.bio?.trim() ?? "");
         setEmail(session.user.email ?? "");
         setCityLabel(session.user.city?.trim() || "Sin ciudad");
-        setLoadError("No se pudieron cargar los datos más recientes.");
+        setPushEnabled(session.user.pushEnabled !== false);
+        setLoadError("No se pudieron cargar los datos mas recientes.");
       } finally {
         if (!cancelled) {
           setLoadingForm(false);
@@ -90,17 +96,21 @@ export default function EditProfileScreen() {
     return () => {
       cancelled = true;
     };
-  }, [token, session?.user?.id]);
+  }, [session, token]);
 
   useEffect(() => {
-    const c = session?.user.city?.trim();
-    if (c) {
-      setCityLabel(c);
+    const city = session?.user.city?.trim();
+    if (city) {
+      setCityLabel(city);
     }
   }, [session?.user.city]);
 
+  useEffect(() => {
+    setPushEnabled(session?.user.pushEnabled !== false);
+  }, [session?.user.pushEnabled]);
+
   const openCitySheet = useCallback(() => {
-    setCitySheetResetKey((k) => k + 1);
+    setCitySheetResetKey((current) => current + 1);
     setCitySheetOpen(true);
   }, []);
 
@@ -109,17 +119,16 @@ export default function EditProfileScreen() {
       if (!token) {
         return;
       }
-      const next: GroupInvitePolicy = restrictToFollowing
+
+      const nextPolicy: GroupInvitePolicy = restrictToFollowing
         ? "from_following_only"
         : "everyone";
+
       setPlanInviteBusy(true);
-      void updateProfile({ groupInvitePolicy: next })
+      void updateProfile({ groupInvitePolicy: nextPolicy })
         .then(() => syncMeFromServer())
         .catch(() => {
-          Alert.alert(
-            "No se pudo guardar",
-            "Probá de nuevo en unos segundos.",
-          );
+          Alert.alert("No se pudo guardar", "Proba de nuevo en unos segundos.");
         })
         .finally(() => {
           setPlanInviteBusy(false);
@@ -128,23 +137,76 @@ export default function EditProfileScreen() {
     [syncMeFromServer, token, updateProfile],
   );
 
+  const onPushToggle = useCallback(
+    (nextValue: boolean) => {
+      if (!token || pushBusy) {
+        return;
+      }
+
+      setPushBusy(true);
+
+      void (async () => {
+        try {
+          if (nextValue && Platform.OS !== "web") {
+            const permissions = await Notifications.getPermissionsAsync();
+            let finalStatus = permissions.status;
+
+            if (finalStatus !== "granted") {
+              if (!permissions.canAskAgain) {
+                Alert.alert(
+                  "Permisos desactivados",
+                  "Activa las notificaciones desde Ajustes para volver a recibir push.",
+                );
+                return;
+              }
+
+              const requested = await Notifications.requestPermissionsAsync();
+              finalStatus = requested.status;
+            }
+
+            if (finalStatus !== "granted") {
+              Alert.alert(
+                "Push desactivado",
+                "La inbox sigue activa y podes volver a intentarlo desde este perfil.",
+              );
+              return;
+            }
+
+            await ensureAndroidNotificationChannel();
+          }
+
+          await updateProfile({ pushEnabled: nextValue });
+          setPushEnabled(nextValue);
+          await syncMeFromServer();
+        } catch {
+          setPushEnabled(session?.user.pushEnabled !== false);
+          Alert.alert("No se pudo guardar", "Proba de nuevo en unos segundos.");
+        } finally {
+          setPushBusy(false);
+        }
+      })();
+    },
+    [pushBusy, session?.user.pushEnabled, syncMeFromServer, token, updateProfile],
+  );
+
   const onSave = useCallback(async () => {
     if (!token) {
       return;
     }
 
-    const dn = displayName.trim();
-    const un = username.trim().toLowerCase();
-    const bioTrim = bio.trim();
+    const nextDisplayName = displayName.trim();
+    const nextUsername = username.trim().toLowerCase();
+    const nextBio = bio.trim();
 
-    if (dn.length === 0) {
-      Alert.alert("Nombre vacío", "Escribí cómo querés que te vean en FECA.");
+    if (nextDisplayName.length === 0) {
+      Alert.alert("Nombre vacio", "Escribi como queres que te vean en FECA.");
       return;
     }
-    if (!USERNAME_RE.test(un)) {
+
+    if (!USERNAME_RE.test(nextUsername)) {
       Alert.alert(
-        "Usuario inválido",
-        "Entre 3 y 30 caracteres, solo letras minúsculas, números y guiones.",
+        "Usuario invalido",
+        "Entre 3 y 30 caracteres, solo letras minusculas, numeros y guiones.",
       );
       return;
     }
@@ -152,14 +214,14 @@ export default function EditProfileScreen() {
     setSaving(true);
     try {
       await updateProfile({
-        displayName: dn,
-        username: un,
-        bio: bioTrim.length === 0 ? null : bioTrim,
+        bio: nextBio.length === 0 ? null : nextBio,
+        displayName: nextDisplayName,
+        username: nextUsername,
       });
       await syncMeFromServer();
       router.back();
     } catch {
-      Alert.alert("No se pudo guardar", "Reintentá en unos segundos.");
+      Alert.alert("No se pudo guardar", "Reintenta en unos segundos.");
     } finally {
       setSaving(false);
     }
@@ -168,7 +230,7 @@ export default function EditProfileScreen() {
   const onDeletePress = useCallback(() => {
     Alert.alert(
       "Eliminar cuenta",
-      "Se borrarán tu perfil, guías, visitas y datos asociados. Esta acción no se puede deshacer.",
+      "Se borraran tu perfil, guias, visitas y datos asociados. Esta accion no se puede deshacer.",
       [
         { style: "cancel", text: "Cancelar" },
         {
@@ -183,7 +245,7 @@ export default function EditProfileScreen() {
               } catch {
                 Alert.alert(
                   "No se pudo eliminar",
-                  "Comprobá la conexión o intentá cerrar sesión y volver a entrar.",
+                  "Comprueba la conexion o intenta cerrar sesion y volver a entrar.",
                 );
               } finally {
                 setDeleting(false);
@@ -195,7 +257,7 @@ export default function EditProfileScreen() {
     );
   }, [deleteAccount]);
 
-  if (!token) {
+  if (!token || !session) {
     return <Redirect href="/(onboarding)/welcome" />;
   }
 
@@ -212,11 +274,13 @@ export default function EditProfileScreen() {
         resetKey={citySheetOpen ? citySheetResetKey : null}
         visible={citySheetOpen}
       />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
         <StackScreenHeader title="Editar perfil" titleAlignment="leading" />
+
         <ScrollView
           contentContainerStyle={[
             styles.scroll,
@@ -242,8 +306,9 @@ export default function EditProfileScreen() {
                   value={email}
                 />
                 <Text style={styles.fieldHint}>
-                  Lo usamos para iniciar sesión; no se puede cambiar desde la app.
+                  Lo usamos para iniciar sesion; no se puede cambiar desde la app.
                 </Text>
+
                 <FormField
                   autoCapitalize="words"
                   label="Nombre visible"
@@ -252,15 +317,17 @@ export default function EditProfileScreen() {
                   placeholder="Tu nombre"
                   value={displayName}
                 />
+
                 <FormField
                   autoCapitalize="none"
                   autoCorrect={false}
                   label="Usuario"
                   maxLength={30}
-                  onChangeText={(t) => setUsername(t.toLowerCase())}
+                  onChangeText={(value) => setUsername(value.toLowerCase())}
                   placeholder="usuario"
                   value={username}
                 />
+
                 <FormField
                   label="Bio"
                   maxLength={280}
@@ -273,7 +340,7 @@ export default function EditProfileScreen() {
                 <View style={styles.cityBlock}>
                   <Text style={styles.cityLabel}>Ciudad</Text>
                   <View style={styles.cityRow}>
-                    <Text style={styles.cityValue} numberOfLines={2}>
+                    <Text numberOfLines={2} style={styles.cityValue}>
                       {cityLabel}
                     </Text>
                     <Pressable
@@ -293,35 +360,57 @@ export default function EditProfileScreen() {
                     </Pressable>
                   </View>
                   <Text style={styles.fieldHint}>
-                    Ciudad canónica: afecta búsquedas, feed y recomendaciones cerca tuyo.
+                    Ciudad canonica: afecta busquedas, feed y recomendaciones cerca
+                    tuyo.
                   </Text>
                 </View>
 
-                <View style={styles.planInviteCard}>
-                  <View style={styles.planInviteTextCol}>
-                    <Text style={styles.planInviteTitle}>Invitaciones a planes</Text>
-                    <Text style={styles.planInviteBody}>
-                      Si está activo, solo podés unirte por invitación cuando quien invita
-                      es alguien que vos seguís.
+                <View style={styles.card}>
+                  <View style={styles.cardTextCol}>
+                    <Text style={styles.cardTitle}>Invitaciones a planes</Text>
+                    <Text style={styles.cardBody}>
+                      Si esta activo, solo podes unirte por invitacion cuando quien
+                      invita es alguien que vos seguis.
                     </Text>
                   </View>
                   <Switch
                     accessibilityLabel="Solo invitaciones de gente que sigo"
                     disabled={planInviteBusy}
                     ios_backgroundColor={fecaTheme.surfaces.container}
-                    onValueChange={(v) => onPlanInviteToggle(v)}
+                    onValueChange={(value) => onPlanInviteToggle(value)}
                     thumbColor={fecaTheme.surfaces.lowest}
                     trackColor={{
                       false: fecaTheme.colors.outlineVariantBase,
                       true: fecaTheme.colors.primary,
                     }}
-                    value={
-                      session.user.groupInvitePolicy === "from_following_only"
-                    }
+                    value={session.user.groupInvitePolicy === "from_following_only"}
+                  />
+                </View>
+
+                <View style={styles.card}>
+                  <View style={styles.cardTextCol}>
+                    <Text style={styles.cardTitle}>Notificaciones push</Text>
+                    <Text style={styles.cardBody}>
+                      La inbox sigue activa siempre. Este switch controla solo la
+                      entrega por push y puede reactivarse desde aca.
+                    </Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel="Notificaciones push"
+                    disabled={pushBusy}
+                    ios_backgroundColor={fecaTheme.surfaces.container}
+                    onValueChange={(value) => onPushToggle(value)}
+                    thumbColor={fecaTheme.surfaces.lowest}
+                    trackColor={{
+                      false: fecaTheme.colors.outlineVariantBase,
+                      true: fecaTheme.colors.primary,
+                    }}
+                    value={pushEnabled}
                   />
                 </View>
 
                 <Text style={styles.sectionLabel}>Preferencias</Text>
+
                 <Pressable
                   onPress={() => router.push("/outing-preferences" as Href)}
                   style={({ pressed }) => [
@@ -339,7 +428,7 @@ export default function EditProfileScreen() {
                       Preferencias para recomendaciones
                     </Text>
                     <Text style={styles.linkRowMeta}>
-                      Cuándo salís, con quién y qué priorizás (privado)
+                      Cuando salis, con quien y que priorizas (privado)
                     </Text>
                   </View>
                   <Ionicons
@@ -348,6 +437,7 @@ export default function EditProfileScreen() {
                     size={20}
                   />
                 </Pressable>
+
                 <Pressable
                   onPress={() => router.push("/taste" as Href)}
                   style={({ pressed }) => [
@@ -376,7 +466,7 @@ export default function EditProfileScreen() {
 
               <PrimaryButton
                 disabled={saving}
-                label={saving ? "Guardando…" : "Guardar cambios"}
+                label={saving ? "Guardando..." : "Guardar cambios"}
                 onPress={() => void onSave()}
                 style={styles.saveBtn}
               />
@@ -402,7 +492,7 @@ export default function EditProfileScreen() {
                     <Ionicons color={DANGER} name="trash-outline" size={20} />
                   )}
                   <Text style={styles.deleteLabel}>
-                    {deleting ? "Eliminando…" : "Eliminar mi cuenta"}
+                    {deleting ? "Eliminando..." : "Eliminar mi cuenta"}
                   </Text>
                 </Pressable>
               </View>
@@ -474,7 +564,7 @@ const styles = StyleSheet.create({
     ...fecaTheme.typography.bodyStrong,
     color: fecaTheme.colors.primary,
   },
-  planInviteCard: {
+  card: {
     alignItems: "center",
     backgroundColor: fecaTheme.surfaces.container,
     borderRadius: fecaTheme.radii.md,
@@ -483,15 +573,15 @@ const styles = StyleSheet.create({
     padding: fecaTheme.spacing.md,
     ...fecaTheme.elevation.ambient,
   },
-  planInviteTextCol: {
+  cardTextCol: {
     flex: 1,
     gap: fecaTheme.spacing.xs,
   },
-  planInviteTitle: {
+  cardTitle: {
     ...fecaTheme.typography.bodyStrong,
     color: fecaTheme.colors.onSurface,
   },
-  planInviteBody: {
+  cardBody: {
     ...fecaTheme.typography.meta,
     color: fecaTheme.colors.muted,
     lineHeight: 18,

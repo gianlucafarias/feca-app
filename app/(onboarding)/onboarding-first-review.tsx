@@ -125,7 +125,9 @@ export default function OnboardingFirstReviewScreen() {
 
       for (let i = 0; i < ordered.length; i += 1) {
         const p = ordered[i];
-        const resolved = await resolveGooglePlace(token, p.googlePlaceId);
+        const resolved = await resolveGooglePlace(token, p.googlePlaceId, {
+          origin: "onboarding_first_review",
+        });
         if (i === 0) {
           await createVisitApi(token, {
             placeId: resolved.id,

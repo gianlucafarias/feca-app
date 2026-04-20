@@ -45,6 +45,8 @@ export default function OnboardingPastPlacesScreen() {
   const [searching, setSearching] = useState(false);
   const [picked, setPicked] = useState<OnboardingPendingPlace[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const lastSearchKeyRef = useRef<string | null>(null);
 
   const accessToken = session?.accessToken;
   const lat = session?.user.lat;
@@ -56,8 +58,64 @@ export default function OnboardingPastPlacesScreen() {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
+      searchAbortRef.current?.abort();
     };
   }, []);
+
+  const runNearbySearch = useCallback(
+    async (options: { limit: number; query?: string }) => {
+      if (!accessToken) {
+        return;
+      }
+      const hasAnchor =
+        (lat != null && lng != null) || Boolean(cityGooglePlaceId?.trim());
+      if (!hasAnchor) {
+        return;
+      }
+
+      const normalizedQuery = options.query?.trim() ?? "";
+      const requestKey = JSON.stringify({
+        cityGooglePlaceId: cityGooglePlaceId ?? null,
+        lat: lat ?? null,
+        lng: lng ?? null,
+        limit: options.limit,
+        query: normalizedQuery,
+      });
+      if (lastSearchKeyRef.current === requestKey) {
+        return;
+      }
+
+      searchAbortRef.current?.abort();
+      const ac = new AbortController();
+      searchAbortRef.current = ac;
+      lastSearchKeyRef.current = requestKey;
+      setSearching(true);
+
+      try {
+        const list = await fetchNearbyPlaces({
+          accessToken,
+          lat: lat ?? undefined,
+          lng: lng ?? undefined,
+          limit: options.limit,
+          ...(normalizedQuery ? { query: normalizedQuery } : {}),
+          origin: "onboarding_past_places",
+          signal: ac.signal,
+        });
+        if (!ac.signal.aborted) {
+          setResults(list);
+        }
+      } catch {
+        if (!ac.signal.aborted) {
+          setResults([]);
+        }
+      } finally {
+        if (!ac.signal.aborted) {
+          setSearching(false);
+        }
+      }
+    },
+    [accessToken, cityGooglePlaceId, lat, lng],
+  );
 
   const loadInitialPlaces = useCallback(async () => {
     if (!accessToken) {
@@ -69,21 +127,8 @@ export default function OnboardingPastPlacesScreen() {
       return;
     }
 
-    setSearching(true);
-    try {
-      const list = await fetchNearbyPlaces({
-        accessToken,
-        lat: lat ?? undefined,
-        lng: lng ?? undefined,
-        limit: 8,
-      });
-      setResults(list);
-    } catch {
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, [accessToken, cityGooglePlaceId, lat, lng]);
+    await runNearbySearch({ limit: 8 });
+  }, [accessToken, cityGooglePlaceId, lat, lng, runNearbySearch]);
 
   const searchPlaces = useCallback(
     async (text: string) => {
@@ -101,23 +146,9 @@ export default function OnboardingPastPlacesScreen() {
         return;
       }
 
-      setSearching(true);
-      try {
-        const list = await fetchNearbyPlaces({
-          accessToken,
-          lat: lat ?? undefined,
-          lng: lng ?? undefined,
-          limit: 10,
-          query: text.trim(),
-        });
-        setResults(list);
-      } catch {
-        setResults([]);
-      } finally {
-        setSearching(false);
-      }
+      await runNearbySearch({ limit: 10, query: text.trim() });
     },
-    [accessToken, cityGooglePlaceId, lat, lng, loadInitialPlaces],
+    [accessToken, cityGooglePlaceId, lat, lng, loadInitialPlaces, runNearbySearch],
   );
 
   useEffect(() => {

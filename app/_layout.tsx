@@ -20,14 +20,16 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useExpoPushRegistration } from "@/hooks/use-expo-push-registration";
+import { usePushNotificationRouting } from "@/hooks/use-push-notification-routing";
 import "@/lib/push/expo-notifications-setup";
 import { AuthProvider } from "@/providers/auth-provider";
 import { OnboardingProvider } from "@/providers/onboarding-provider";
 import { UnreadNotificationsProvider } from "@/providers/unread-notifications-provider";
 import { fecaNavigationTheme, fecaTheme } from "@/theme/feca";
 
-function ExpoPushRegistration() {
+function PushNotificationsRuntime() {
   useExpoPushRegistration();
+  usePushNotificationRouting();
   return null;
 }
 
@@ -71,7 +73,7 @@ export default function RootLayout() {
           <AuthProvider>
             <OnboardingProvider>
               <UnreadNotificationsProvider>
-                <ExpoPushRegistration />
+                <PushNotificationsRuntime />
                 <Stack
                   screenOptions={{
                     headerShown: false,

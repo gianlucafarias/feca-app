@@ -52,6 +52,7 @@ export function useHomeFeed(options: {
         mode,
         lat,
         lng,
+        origin: "home_feed",
         ...(mode === "city" && trimmedPlaceId
           ? { cityGooglePlaceId: trimmedPlaceId }
           : {}),

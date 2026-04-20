@@ -151,6 +151,8 @@ export default function GroupDetailScreen() {
   const [remoteSearchError, setRemoteSearchError] = useState<string | null>(null);
   const placeSearchRef = useRef(placeSearch);
   const proposePlaceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteSearchAbortRef = useRef<AbortController | null>(null);
+  const lastRemoteSearchKeyRef = useRef<string | null>(null);
   placeSearchRef.current = placeSearch;
   const placeSearchTrimmed = placeSearch.trim();
   const isPlaceSearchActive = placeSearchTrimmed.length > 0;
@@ -335,6 +337,7 @@ export default function GroupDetailScreen() {
 
   useEffect(() => {
     if (!proposeVisible || proposeStep !== "place" || !accessToken) {
+      remoteSearchAbortRef.current?.abort();
       return;
     }
 
@@ -348,6 +351,8 @@ export default function GroupDetailScreen() {
     const latest = placeSearchRef.current.trim();
     if (!latest) {
       clearDebounce();
+      remoteSearchAbortRef.current?.abort();
+      lastRemoteSearchKeyRef.current = null;
       setRemoteSearchPlaces([]);
       setRemoteSearchError(null);
       setRemoteSearchLoading(false);
@@ -363,6 +368,7 @@ export default function GroupDetailScreen() {
 
     if (!hasAnchor) {
       clearDebounce();
+      remoteSearchAbortRef.current?.abort();
       setRemoteSearchPlaces([]);
       setRemoteSearchLoading(false);
       setRemoteSearchError(
@@ -373,6 +379,8 @@ export default function GroupDetailScreen() {
 
     if (latest.length < 2) {
       clearDebounce();
+      remoteSearchAbortRef.current?.abort();
+      lastRemoteSearchKeyRef.current = null;
       setRemoteSearchPlaces([]);
       setRemoteSearchLoading(false);
       setRemoteSearchError(null);
@@ -388,6 +396,22 @@ export default function GroupDetailScreen() {
         setRemoteSearchLoading(false);
         return;
       }
+      const requestKey = JSON.stringify({
+        cityGooglePlaceId: cityGooglePlaceId ?? null,
+        lat: userLat ?? null,
+        lng: userLng ?? null,
+        q,
+      });
+      if (lastRemoteSearchKeyRef.current === requestKey) {
+        setRemoteSearchLoading(false);
+        return;
+      }
+
+      remoteSearchAbortRef.current?.abort();
+      const ac = new AbortController();
+      remoteSearchAbortRef.current = ac;
+      lastRemoteSearchKeyRef.current = requestKey;
+
       void (async () => {
         try {
           const results = await fetchNearbyPlaces({
@@ -396,14 +420,16 @@ export default function GroupDetailScreen() {
             lng: userLng ?? undefined,
             query: q,
             limit: 20,
+            origin: "group_place_picker",
+            signal: ac.signal,
           });
-          if (placeSearchRef.current.trim() !== q) {
+          if (ac.signal.aborted || placeSearchRef.current.trim() !== q) {
             return;
           }
           setRemoteSearchPlaces(results.map(mapNearbyPlaceToPlace));
           setRemoteSearchError(null);
         } catch (err) {
-          if (placeSearchRef.current.trim() !== q) {
+          if (ac.signal.aborted || placeSearchRef.current.trim() !== q) {
             return;
           }
           setRemoteSearchPlaces([]);
@@ -411,7 +437,7 @@ export default function GroupDetailScreen() {
             err instanceof Error ? err.message : "No se pudieron cargar los lugares",
           );
         } finally {
-          if (placeSearchRef.current.trim() === q) {
+          if (!ac.signal.aborted && placeSearchRef.current.trim() === q) {
             setRemoteSearchLoading(false);
           }
         }
@@ -420,6 +446,7 @@ export default function GroupDetailScreen() {
 
     return () => {
       clearDebounce();
+      remoteSearchAbortRef.current?.abort();
     };
   }, [
     accessToken,

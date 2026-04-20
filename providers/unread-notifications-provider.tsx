@@ -61,6 +61,9 @@ export function UnreadNotificationsProvider({ children }: { children: ReactNode 
   }, [refreshUnreadCount]);
 
   useEffect(() => {
+    if (Platform.OS !== "web") {
+      return;
+    }
     const id = setInterval(() => void refreshUnreadCount(), 45_000);
     return () => clearInterval(id);
   }, [refreshUnreadCount]);

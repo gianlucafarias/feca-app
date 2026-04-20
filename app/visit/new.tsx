@@ -91,6 +91,8 @@ export default function NewVisitScreen() {
   const [searchResults, setSearchResults] = useState<NearbyPlace[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const lastSearchKeyRef = useRef<string | null>(null);
   const keyboardInset = useKeyboardBottomInset();
 
   const lat = session?.user.lat;
@@ -106,32 +108,78 @@ export default function NewVisitScreen() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      searchAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     if (step !== "success") return;
     const timeout = setTimeout(() => router.back(), 1500);
     return () => clearTimeout(timeout);
   }, [step]);
+
+  const runNearbySearch = useCallback(
+    async (options: { limit: number; query?: string }) => {
+      if (!accessToken) return;
+      const hasAnchor =
+        (lat != null && lng != null) || Boolean(cityGooglePlaceId?.trim());
+      if (!hasAnchor) return;
+
+      const normalizedQuery = options.query?.trim() ?? "";
+      const requestKey = JSON.stringify({
+        cityGooglePlaceId: cityGooglePlaceId ?? null,
+        lat: lat ?? null,
+        lng: lng ?? null,
+        limit: options.limit,
+        query: normalizedQuery,
+      });
+      if (lastSearchKeyRef.current === requestKey) {
+        return;
+      }
+
+      searchAbortRef.current?.abort();
+      const ac = new AbortController();
+      searchAbortRef.current = ac;
+      lastSearchKeyRef.current = requestKey;
+      setIsSearching(true);
+
+      try {
+        const results = await fetchNearbyPlaces({
+          accessToken,
+          lat: lat ?? undefined,
+          lng: lng ?? undefined,
+          limit: options.limit,
+          ...(normalizedQuery ? { query: normalizedQuery } : {}),
+          origin: "visit_new",
+          signal: ac.signal,
+        });
+        if (!ac.signal.aborted) {
+          setSearchResults(results);
+        }
+      } catch {
+        if (!ac.signal.aborted) {
+          setSearchResults([]);
+        }
+      } finally {
+        if (!ac.signal.aborted) {
+          setIsSearching(false);
+        }
+      }
+    },
+    [accessToken, cityGooglePlaceId, lat, lng],
+  );
 
   const loadInitialPlaces = useCallback(async () => {
     if (!accessToken) return;
     const hasAnchor =
       (lat != null && lng != null) || Boolean(cityGooglePlaceId?.trim());
     if (!hasAnchor) return;
-
-    setIsSearching(true);
-    try {
-      const results = await fetchNearbyPlaces({
-        accessToken,
-        lat: lat ?? undefined,
-        lng: lng ?? undefined,
-        limit: 8,
-      });
-      setSearchResults(results);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [accessToken, cityGooglePlaceId, lat, lng]);
+    await runNearbySearch({ limit: 8 });
+  }, [accessToken, cityGooglePlaceId, lat, lng, runNearbySearch]);
 
   useEffect(() => {
     if (step === "search" && !query.trim()) {
@@ -151,23 +199,9 @@ export default function NewVisitScreen() {
         return;
       }
 
-      setIsSearching(true);
-      try {
-        const results = await fetchNearbyPlaces({
-          accessToken,
-          lat: lat ?? undefined,
-          lng: lng ?? undefined,
-          limit: 10,
-          query: text.trim(),
-        });
-        setSearchResults(results);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
+      await runNearbySearch({ limit: 10, query: text.trim() });
     },
-    [accessToken, cityGooglePlaceId, lat, lng, loadInitialPlaces],
+    [accessToken, cityGooglePlaceId, lat, lng, loadInitialPlaces, runNearbySearch],
   );
 
   const handleQueryChange = useCallback(
@@ -251,8 +285,10 @@ export default function NewVisitScreen() {
             lat,
             lng,
             name: finalName,
-          })
-        : await resolveGooglePlace(accessToken, googlePlaceId!);
+          }, { origin: "visit_new" })
+        : await resolveGooglePlace(accessToken, googlePlaceId!, {
+            origin: "visit_new",
+          });
 
       return createVisitApi(accessToken, {
         note,

@@ -58,6 +58,8 @@ export function AddToDiarySheet({
         await addPlaceToDiaryApi(diaryId, accessToken, {
           placeId: placeId ?? undefined,
           googlePlaceId: googlePlaceId ?? undefined,
+        }, {
+          origin: "place_detail",
         });
       } catch {
         return;

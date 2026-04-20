@@ -9,9 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.feca.app",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.feca.app",
       "adaptiveIcon": {
         "backgroundColor": "#fcf9f6",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -40,13 +42,28 @@
         }
       ],
       "@react-native-google-signin/google-signin",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FECA usa tu ubicacion para sugerirte lugares y guardar tu ciudad."
+        }
+      ],
       "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "feca-default",
+          "icon": "./assets/images/notification-icon-monochrome.png",
+          "color": "#595F6A"
+        }
+      ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "feca necesita acceso a tu galería para adjuntar fotos a la reseña."
+          "photosPermission": "FECA necesita acceso a tu galeria para adjuntar fotos a la resena."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

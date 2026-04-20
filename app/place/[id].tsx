@@ -128,7 +128,9 @@ export default function PlaceDetailScreen() {
     setError(null);
 
     try {
-      const detail = await fetchPlaceDetail(id, accessToken);
+      const detail = await fetchPlaceDetail(id, accessToken, {
+        origin: "place_detail",
+      });
       setPlace(detail);
     } catch (err) {
       setError(
@@ -158,7 +160,9 @@ export default function PlaceDetailScreen() {
       return;
     }
     let cancelled = false;
-    void resolveGooglePlace(accessToken, place.googlePlaceId)
+    void resolveGooglePlace(accessToken, place.googlePlaceId, {
+      origin: "place_detail",
+    })
       .then((p) => {
         if (!cancelled) setResolvedPlaceId(p.id);
       })

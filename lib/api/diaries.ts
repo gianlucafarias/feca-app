@@ -1,6 +1,6 @@
 import type { ApiDiary } from "@/types/api";
 
-import { getApiBaseUrl, parseError } from "./base";
+import { FECA_PLACES_ORIGIN_HEADER, getApiBaseUrl, parseError } from "./base";
 
 type DiariesListResponse = {
   diaries: ApiDiary[];
@@ -41,6 +41,7 @@ export type UpdateDiaryBody = {
 type AddDiaryPlaceBody = {
   placeId?: string;
   googlePlaceId?: string;
+  sessionToken?: string;
 };
 
 export async function createDiaryApi(
@@ -227,15 +228,21 @@ export async function addPlaceToDiaryApi(
   diaryId: string,
   accessToken: string,
   body: AddDiaryPlaceBody,
+  options?: { origin?: string },
 ): Promise<ApiDiary> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+  if (options?.origin?.trim()) {
+    headers[FECA_PLACES_ORIGIN_HEADER] = options.origin.trim();
+  }
+
   const response = await fetch(
     `${getApiBaseUrl()}/v1/diaries/${encodeURIComponent(diaryId)}/places`,
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(body),
     },
   );

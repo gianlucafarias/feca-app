@@ -1,6 +1,6 @@
-export type GroupInvitePolicy = "everyone" | "from_following_only";
-
 import type { ApiOutingPreferencesV1 } from "@/types/api";
+
+export type GroupInvitePolicy = "everyone" | "from_following_only";
 
 /** Pasos del onboarding extendido (usuarios nuevos, `isNewUser`). */
 export type ExtendedOnboardingStep =
@@ -26,6 +26,8 @@ export type AuthenticatedUser = {
   username: string;
   /** Preferencia para invitaciones a planes (GET/PATCH /v1/me). */
   groupInvitePolicy?: GroupInvitePolicy;
+  /** Switch general de push; la inbox sigue siempre activa. */
+  pushEnabled?: boolean;
   /** Preferencias de salida para recomendaciones (privado). */
   outingPreferences?: ApiOutingPreferencesV1 | null;
   /** Contador de visitas (GET /v1/me); opcional hasta sincronizar. */
@@ -69,5 +71,6 @@ export type UpdateMyProfileInput = {
   lng?: number;
   username?: string;
   groupInvitePolicy?: GroupInvitePolicy;
+  pushEnabled?: boolean;
   outingPreferences?: ApiOutingPreferencesV1 | null;
 };

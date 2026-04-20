@@ -10,6 +10,7 @@ import {
 } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
 import { fetchMe } from "@/lib/api/me";
+import { revokeExpoPushInstallation } from "@/lib/api/push";
 import {
   deleteMyAccount,
   loginWithGoogleIdToken,
@@ -29,6 +30,7 @@ import {
   readStoredSession,
   writeStoredSession,
 } from "@/lib/auth/session-storage";
+import { getPushInstallationId } from "@/lib/push/push-installation-id";
 import type {
   AuthLoginResult,
   AuthSession,
@@ -467,6 +469,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         lat: me.lat ?? current.user.lat,
         lng: me.lng ?? current.user.lng,
         outingPreferences: me.outingPreferences ?? current.user.outingPreferences,
+        pushEnabled: me.pushEnabled ?? current.user.pushEnabled,
         username: me.username,
         visitCount: me.visitCount ?? current.user.visitCount,
       } as AuthenticatedUser);
@@ -539,10 +542,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const signOut = useCallback(async () => {
-    const refreshToken = sessionRef.current?.refreshToken;
+    const currentSession = sessionRef.current;
+    const refreshToken = currentSession?.refreshToken;
+    const accessToken = currentSession?.accessToken;
 
     setErrorMessage(null);
     await clearSessionState();
+
+    if (accessToken) {
+      try {
+        const installationId = await getPushInstallationId();
+        await revokeExpoPushInstallation(accessToken, installationId);
+      } catch {
+        // noop: local logout is enough if revoke fails.
+      }
+    }
 
     try {
       await GoogleSignin?.signOut();

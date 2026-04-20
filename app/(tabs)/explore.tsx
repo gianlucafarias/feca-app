@@ -68,6 +68,7 @@ export default function ExploreScreen() {
             lng: lng ?? undefined,
             query: q,
             type,
+            origin: "explore_tab",
           });
           setPlaces(results);
         } else if (mode === "wifi") {
@@ -76,6 +77,7 @@ export default function ExploreScreen() {
             intent: "work_2h" as ExploreContextId,
             lat: lat ?? undefined,
             lng: lng ?? undefined,
+            origin: "explore_tab",
           });
           setPlaces(results);
         } else if (mode === "specialty") {
@@ -84,6 +86,7 @@ export default function ExploreScreen() {
             lat: lat ?? undefined,
             lng: lng ?? undefined,
             type: "cafe",
+            origin: "explore_tab",
           });
           setPlaces(results);
         } else {
@@ -91,6 +94,7 @@ export default function ExploreScreen() {
             accessToken,
             lat: lat ?? undefined,
             lng: lng ?? undefined,
+            origin: "explore_tab",
           });
           setPlaces(results);
         }

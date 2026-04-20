@@ -82,20 +82,20 @@ export type ApiOutingCompany = "solo" | "couple" | "small_group" | "large_group"
 
 export type ApiOutingPreferencesV1 = {
   schemaVersion: 1;
-  typicalOutingSlots?: Array<
+  typicalOutingSlots?: (
     | "weekday_morning"
     | "weekday_afternoon"
     | "weekday_evening"
     | "weekend_day"
     | "weekend_night"
-  >;
+  )[];
   /** Varias opciones; el backend acepta también el campo viejo `typicalCompany` al guardar. */
   typicalCompanies?: ApiOutingCompany[];
   /** @deprecated Preferir `typicalCompanies`. */
   typicalCompany?: ApiOutingCompany;
-  placePriorities?: Array<
+  placePriorities?: (
     "atmosphere" | "distance" | "food_drink" | "price" | "quiet" | "service"
-  >;
+  )[];
 };
 
 export type ApiMeUser = ApiUserPublic & {
@@ -109,6 +109,7 @@ export type ApiMeUser = ApiUserPublic & {
   followingCount?: number;
   followersCount?: number;
   groupInvitePolicy?: ApiGroupInvitePolicy | null;
+  pushEnabled?: boolean | null;
   outingPreferences?: ApiOutingPreferencesV1 | null;
   isAdmin?: boolean;
   isEditor?: boolean;
@@ -128,7 +129,17 @@ export type ApiNotificationType =
   | "group_event_proposed"
   | "group_event_rsvp"
   | "visit_created"
-  | "diary_published";
+  | "diary_published"
+  | "group_invite_reminder"
+  | "group_event_rsvp_reminder"
+  | "group_event_today_reminder"
+  | "weekly_digest"
+  | "contextual_recommendation";
+
+export type ApiNotificationEntity = {
+  id: string;
+  kind: "user" | "group" | "group_event" | "visit" | "diary" | "place";
+};
 
 /**
  * GET /v1/me/notifications — capa canónica: title, body, deepLink, entity, data.
@@ -143,7 +154,7 @@ export type ApiNotification = {
   title?: string | null;
   body?: string | null;
   deepLink?: string | null;
-  entity?: Record<string, unknown> | null;
+  entity?: ApiNotificationEntity | null;
   data?: Record<string, unknown> | null;
 };
 

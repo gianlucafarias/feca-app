@@ -90,6 +90,8 @@ export default function SearchScreen() {
   const followingIdsRef = useRef(followingIds);
   followingIdsRef.current = followingIds;
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const placesAbortRef = useRef<AbortController | null>(null);
+  const lastPlacesRequestKeyRef = useRef<string | null>(null);
 
   const lat = session?.user.lat;
   const lng = session?.user.lng;
@@ -105,10 +107,14 @@ export default function SearchScreen() {
 
   useEffect(() => {
     if (searchMode !== "places" || !accessToken) {
+      placesAbortRef.current?.abort();
+      setPlacesLoading(false);
       return;
     }
     const q = deferredQuery.trim();
     if (q.length < MIN_QUERY_LEN) {
+      placesAbortRef.current?.abort();
+      lastPlacesRequestKeyRef.current = null;
       setPlaces([]);
       setPlacesLoading(false);
       setPlacesError(null);
@@ -117,6 +123,21 @@ export default function SearchScreen() {
 
     setPlacesLoading(true);
     const timer = setTimeout(() => {
+      const requestKey = JSON.stringify({
+        lat: lat ?? null,
+        lng: lng ?? null,
+        q,
+      });
+      if (lastPlacesRequestKeyRef.current === requestKey) {
+        setPlacesLoading(false);
+        return;
+      }
+
+      placesAbortRef.current?.abort();
+      const ac = new AbortController();
+      placesAbortRef.current = ac;
+      lastPlacesRequestKeyRef.current = requestKey;
+
       void (async () => {
         try {
           const results = await fetchNearbyPlaces({
@@ -124,21 +145,33 @@ export default function SearchScreen() {
             lat: lat ?? undefined,
             lng: lng ?? undefined,
             query: q,
+            origin: "search_places",
+            signal: ac.signal,
           });
-          setPlaces(results);
-          setPlacesError(null);
+          if (!ac.signal.aborted) {
+            setPlaces(results);
+            setPlacesError(null);
+          }
         } catch (err) {
+          if (ac.signal.aborted) {
+            return;
+          }
           const message =
             err instanceof Error ? err.message : "No se pudieron cargar los lugares";
           setPlacesError(message);
           setPlaces([]);
         } finally {
-          setPlacesLoading(false);
+          if (!ac.signal.aborted) {
+            setPlacesLoading(false);
+          }
         }
       })();
     }, DEBOUNCE_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      placesAbortRef.current?.abort();
+    };
   }, [searchMode, deferredQuery, accessToken, cityGooglePlaceId, lat, lng]);
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -37,6 +37,18 @@ type AddStopRow =
   | { kind: "local"; place: Place }
   | { kind: "remote"; item: ApiPlaceAutocompleteItem };
 
+function createPlacesSessionToken(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function guideVisibilityLabel(v: GuideVisibility | null | undefined): string | null {
   if (v === "public") return "Pública";
   if (v === "unlisted") return "Enlace";
@@ -59,6 +71,9 @@ export default function DiaryDetailScreen() {
   const [publishBusy, setPublishBusy] = useState(false);
   const [remoteItems, setRemoteItems] = useState<ApiPlaceAutocompleteItem[] | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(false);
+  const remoteAbortRef = useRef<AbortController | null>(null);
+  const lastRemoteRequestKeyRef = useRef<string | null>(null);
+  const autocompleteSessionTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!id || !accessToken) {
@@ -95,6 +110,9 @@ export default function DiaryDetailScreen() {
 
   useEffect(() => {
     if (!addVisible) {
+      remoteAbortRef.current?.abort();
+      lastRemoteRequestKeyRef.current = null;
+      autocompleteSessionTokenRef.current = null;
       setSearch("");
       setRemoteItems(null);
       setRemoteLoading(false);
@@ -103,18 +121,43 @@ export default function DiaryDetailScreen() {
 
   useEffect(() => {
     if (!addVisible || !accessToken) {
+      remoteAbortRef.current?.abort();
       return;
     }
     const q = search.trim();
     if (q.length < 2) {
+      remoteAbortRef.current?.abort();
+      if (!q.length) {
+        autocompleteSessionTokenRef.current = null;
+        lastRemoteRequestKeyRef.current = null;
+      }
       setRemoteItems(null);
       setRemoteLoading(false);
       return;
     }
 
-    let cancelled = false;
     setRemoteLoading(true);
     const timer = setTimeout(() => {
+      const requestKey = JSON.stringify({
+        city: session?.user.city ?? "",
+        lat: session?.user.lat ?? null,
+        lng: session?.user.lng ?? null,
+        q,
+      });
+      if (lastRemoteRequestKeyRef.current === requestKey) {
+        setRemoteLoading(false);
+        return;
+      }
+
+      if (!autocompleteSessionTokenRef.current) {
+        autocompleteSessionTokenRef.current = createPlacesSessionToken();
+      }
+
+      remoteAbortRef.current?.abort();
+      const ac = new AbortController();
+      remoteAbortRef.current = ac;
+      lastRemoteRequestKeyRef.current = requestKey;
+
       void (async () => {
         try {
           const res = await fetchPlacesAutocomplete(accessToken, {
@@ -123,16 +166,19 @@ export default function DiaryDetailScreen() {
             lat: session?.user.lat,
             lng: session?.user.lng,
             limit: 10,
+            origin: "diary_add_place",
+            sessionToken: autocompleteSessionTokenRef.current ?? undefined,
+            signal: ac.signal,
           });
-          if (!cancelled) {
+          if (!ac.signal.aborted) {
             setRemoteItems(res.items ?? []);
           }
         } catch {
-          if (!cancelled) {
+          if (!ac.signal.aborted) {
             setRemoteItems([]);
           }
         } finally {
-          if (!cancelled) {
+          if (!ac.signal.aborted) {
             setRemoteLoading(false);
           }
         }
@@ -140,8 +186,8 @@ export default function DiaryDetailScreen() {
     }, 340);
 
     return () => {
-      cancelled = true;
       clearTimeout(timer);
+      remoteAbortRef.current?.abort();
     };
   }, [
     accessToken,
@@ -257,6 +303,7 @@ export default function DiaryDetailScreen() {
     if (!diaryId || !accessToken) {
       return;
     }
+    const sessionToken = autocompleteSessionTokenRef.current?.trim();
 
     const body =
       item.placeId?.trim()
@@ -265,9 +312,15 @@ export default function DiaryDetailScreen() {
             ...(item.sourcePlaceId?.trim()
               ? { googlePlaceId: item.sourcePlaceId.trim() }
               : {}),
+            ...(sessionToken && item.sourcePlaceId?.trim()
+              ? { sessionToken }
+              : {}),
           }
         : item.sourcePlaceId?.trim()
-          ? { googlePlaceId: item.sourcePlaceId.trim() }
+          ? {
+              googlePlaceId: item.sourcePlaceId.trim(),
+              ...(sessionToken ? { sessionToken } : {}),
+            }
           : null;
 
     if (!body) {
@@ -276,8 +329,12 @@ export default function DiaryDetailScreen() {
 
     void (async () => {
       try {
-        const updated = await addPlaceToDiaryApi(diaryId, accessToken, body);
+        const updated = await addPlaceToDiaryApi(diaryId, accessToken, body, {
+          origin: "diary_add_place",
+        });
         setApiDiary(mapApiDiaryToCafeDiary(updated));
+        autocompleteSessionTokenRef.current = null;
+        lastRemoteRequestKeyRef.current = null;
         setAddVisible(false);
         setSearch("");
         setRemoteItems(null);
@@ -298,6 +355,8 @@ export default function DiaryDetailScreen() {
         const updated = await addPlaceToDiaryApi(diaryId, accessToken, {
           placeId: place.id,
           googlePlaceId: place.googlePlaceId,
+        }, {
+          origin: "diary_add_place",
         });
         setApiDiary(mapApiDiaryToCafeDiary(updated));
         setAddVisible(false);

@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -61,7 +61,6 @@ export default function CityScreen() {
     onPickCitySuggestion,
     cityApiEnabled,
     resolveCoordinates,
-    resolvedCityLabel,
     setFieldBlur,
     setFieldFocus,
     setSubmitError,
@@ -71,6 +70,7 @@ export default function CityScreen() {
     suggestionsLoading,
   } = useCityLocationPicker({
     accessToken: session?.accessToken,
+    origin: "onboarding_city",
     initialCity: draft.city.trim() || session?.user.city || "",
     initialCityGooglePlaceId:
       draft.cityGooglePlaceId ?? session?.user.cityGooglePlaceId,
@@ -91,11 +91,6 @@ export default function CityScreen() {
     draft.username.trim() || session?.user.username || undefined;
   const fallbackDisplayName =
     draft.displayName.trim() || session?.user.displayName || undefined;
-  const resolvedLabel = useMemo(
-    () => resolvedCityLabel.trim(),
-    [resolvedCityLabel],
-  );
-
   const scrollBottomPadding =
     fecaTheme.spacing.xxxl + insets.bottom + fecaTheme.spacing.lg;
 

@@ -1,6 +1,8 @@
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 
+export const ANDROID_NOTIFICATION_CHANNEL_ID = "feca-default";
+
 /**
  * Comportamiento en primer plano; debe cargarse una sola vez al arrancar la app.
  */
@@ -16,8 +18,8 @@ Notifications.setNotificationHandler({
 
 export async function ensureAndroidNotificationChannel(): Promise<void> {
   if (Platform.OS !== "android") return;
-  await Notifications.setNotificationChannelAsync("default", {
-    name: "Default",
+  await Notifications.setNotificationChannelAsync(ANDROID_NOTIFICATION_CHANNEL_ID, {
+    name: "FECA",
     importance: Notifications.AndroidImportance.DEFAULT,
   });
 }

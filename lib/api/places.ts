@@ -8,7 +8,12 @@ import type {
   PlaceDetail,
 } from "@/types/places";
 
-import { getApiBaseUrl, parseError, rethrowWithNetworkHelp } from "./base";
+import {
+  FECA_PLACES_ORIGIN_HEADER,
+  getApiBaseUrl,
+  parseError,
+  rethrowWithNetworkHelp,
+} from "./base";
 
 /** Acepta camelCase o snake_case en señales sociales (carruseles / explore). */
 function mergeNearbySocialAliases(place: NearbyPlace): NearbyPlace {
@@ -51,7 +56,25 @@ type NearbyPlacesParams = {
     | "home_friends_liked";
   /** P. ej. `Date.now()` al refrescar para reordenar sin invalidar caché de candidatos. */
   rotate?: number;
+  origin?: string;
+  signal?: AbortSignal;
 };
+
+function buildPlacesHeaders(
+  accessToken: string,
+  options?: { origin?: string; json?: boolean },
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (options?.json) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (options?.origin?.trim()) {
+    headers[FECA_PLACES_ORIGIN_HEADER] = options.origin.trim();
+  }
+  return headers;
+}
 
 export async function fetchPlacesAutocomplete(
   accessToken: string,
@@ -62,6 +85,8 @@ export async function fetchPlacesAutocomplete(
     lng?: number;
     limit?: number;
     sessionToken?: string;
+    origin?: string;
+    signal?: AbortSignal;
   },
 ): Promise<ApiPlacesAutocompleteResponse> {
   const q = params.q.trim();
@@ -87,7 +112,8 @@ export async function fetchPlacesAutocomplete(
   const response = await fetch(
     `${getApiBaseUrl()}/v1/places/autocomplete?${search.toString()}`,
     {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: buildPlacesHeaders(accessToken, { origin: params.origin }),
+      signal: params.signal,
     },
   );
 
@@ -107,6 +133,8 @@ export async function fetchNearbyPlaces({
   limit,
   variant,
   rotate,
+  origin,
+  signal,
 }: NearbyPlacesParams): Promise<NearbyPlace[]> {
   const params = new URLSearchParams();
   if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -125,9 +153,8 @@ export async function fetchNearbyPlaces({
   const response = await fetch(
     `${getApiBaseUrl()}/v1/places/nearby?${params.toString()}`,
     {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: buildPlacesHeaders(accessToken, { origin }),
+      signal,
     },
   );
 
@@ -145,6 +172,8 @@ export async function fetchExploreContext(params: {
   lat?: number;
   lng?: number;
   limit?: number;
+  origin?: string;
+  signal?: AbortSignal;
 }): Promise<NearbyPlace[]> {
   const search = new URLSearchParams({
     intent: params.intent,
@@ -164,7 +193,8 @@ export async function fetchExploreContext(params: {
   const response = await fetch(
     `${getApiBaseUrl()}/v1/explore/context?${search.toString()}`,
     {
-      headers: { Authorization: `Bearer ${params.accessToken}` },
+      headers: buildPlacesHeaders(params.accessToken, { origin: params.origin }),
+      signal: params.signal,
     },
   );
 
@@ -179,13 +209,13 @@ export async function fetchExploreContext(params: {
 export async function fetchPlaceDetail(
   googlePlaceId: string,
   accessToken: string,
+  options?: { origin?: string; signal?: AbortSignal },
 ): Promise<PlaceDetail> {
   const response = await fetch(
     `${getApiBaseUrl()}/v1/places/${encodeURIComponent(googlePlaceId)}`,
     {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: buildPlacesHeaders(accessToken, { origin: options?.origin }),
+      signal: options?.signal,
     },
   );
 
@@ -200,18 +230,27 @@ export async function fetchPlaceDetail(
 export async function resolveGooglePlace(
   accessToken: string,
   googlePlaceId: string,
+  options?: {
+    origin?: string;
+    sessionToken?: string;
+    signal?: AbortSignal;
+  },
 ): Promise<ApiStoredPlace> {
   let response: Response;
   try {
     response = await fetch(`${getApiBaseUrl()}/v1/places/resolve`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: buildPlacesHeaders(accessToken, {
+        json: true,
+        origin: options?.origin,
+      }),
+      signal: options?.signal,
       body: JSON.stringify({
         source: "google",
         sourcePlaceId: googlePlaceId,
+        ...(options?.sessionToken?.trim()
+          ? { sessionToken: options.sessionToken.trim() }
+          : {}),
       }),
     });
   } catch (e) {
@@ -236,13 +275,15 @@ export async function createManualPlaceApi(
     lat?: number;
     lng?: number;
   },
+  options?: { origin?: string; signal?: AbortSignal },
 ): Promise<ApiStoredPlace> {
   const response = await fetch(`${getApiBaseUrl()}/v1/places/manual`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: buildPlacesHeaders(accessToken, {
+      json: true,
+      origin: options?.origin,
+    }),
+    signal: options?.signal,
     body: JSON.stringify(body),
   });
 

@@ -56,6 +56,7 @@ export function useHomePlaceCarousels(options: {
         lat,
         lng,
         limit: SECTION_LIMIT,
+        origin: "home_carousels" as const,
         ...rotateOpts,
       };
 
